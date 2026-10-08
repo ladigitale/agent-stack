@@ -84,6 +84,40 @@ function flexAttributes(c: A2uiComponent): Record<string, string> {
   return attributes;
 }
 
+/**
+ * Concorde form components render `label` / `description` with `unsafeHTML`:
+ * agent strings are escaped so they always display as text.
+ */
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+}
+
+/** Literal text prop meant for a Concorde `label`-like attribute (escaped). */
+function labelText(c: A2uiComponent, prop: string): string | undefined {
+  const v = literal(c, prop);
+  return v == null ? undefined : escapeHtml(v);
+}
+
+/** Scratch data provider of a bridged field (Concorde field ⇄ A2UI value). */
+function fieldProvider(ctx: MapContext, componentId: string): string {
+  return `${ctx.dataProvider}__${componentId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
+
+function boundPath(c: A2uiComponent, prop: string): string {
+  const v = c[prop];
+  if (!isPath(v)) {
+    throw new A2uiUnsupportedError(`${c.component}.${prop}: a data binding ({"path": …}) is required`, c.id);
+  }
+  return pointerToKey(v.path);
+}
+
+function bridge(ctx: MapContext, c: A2uiComponent, key: string, codec: "bool" | "list1" | "number"): SDUINode {
+  return {
+    tagName: "a2ui-bridge",
+    attributes: { "data-provider": ctx.dataProvider, key, "field-provider": fieldProvider(ctx, c.id), codec },
+  };
+}
+
 const TEXT_VARIANTS = new Set(["h1", "h2", "h3", "h4", "h5", "caption"]);
 
 const mappers: Record<string, Mapper> = {
@@ -128,7 +162,7 @@ const mappers: Record<string, Mapper> = {
 
   TextField: (c, ctx) => {
     const attributes: Record<string, string> = {};
-    const label = literal(c, "label");
+    const label = labelText(c, "label");
     if (label) attributes.label = label;
     const variant = literal(c, "variant");
     const key =
@@ -147,19 +181,95 @@ const mappers: Record<string, Mapper> = {
     }
     return { key, attributes };
   },
+
+  CheckBox: (c, ctx) => {
+    const attributes: Record<string, string> = {
+      unique: "",
+      value: "true",
+      name: "v",
+      formDataProvider: fieldProvider(ctx, c.id),
+    };
+    const label = labelText(c, "label");
+    if (label) attributes.label = label;
+    return {
+      key: "a2ui:CheckBox",
+      nodes: [bridge(ctx, c, boundPath(c, "value"), "bool"), { tagName: "sonic-checkbox", attributes }],
+    };
+  },
+
+  ChoicePicker: (c, ctx) => {
+    const key = boundPath(c, "value");
+    const multiple = literal(c, "variant") === "multipleSelection";
+    if (literal(c, "displayStyle") === "chips") ctx.warn(`ChoicePicker "${c.id}": chips are rendered as ${multiple ? "checkboxes" : "radios"}`);
+    if (c.filterable === true) ctx.warn(`ChoicePicker "${c.id}": filterable is ignored`);
+    const options = Array.isArray(c.options) ? (c.options as { label?: unknown; value?: unknown }[]) : [];
+    const nodes: SDUINode[] = [];
+    const label = literal(c, "label");
+    if (label) nodes.push({ tagName: "p", attributes: { "data-a2ui-label": "" }, textContent: label });
+    if (!multiple) nodes.push(bridge(ctx, c, key, "list1"));
+    for (const [i, opt] of options.entries()) {
+      if (typeof opt?.value !== "string") {
+        throw new A2uiUnsupportedError(`ChoicePicker.options[${i}].value: a string is required`, c.id);
+      }
+      if (typeof opt.label !== "string") {
+        throw new A2uiUnsupportedError(`ChoicePicker.options[${i}].label: bindings are not supported yet`, c.id);
+      }
+      nodes.push({
+        tagName: multiple ? "sonic-checkbox" : "sonic-radio",
+        attributes: {
+          value: opt.value,
+          label: escapeHtml(opt.label),
+          ...(multiple ? { formDataProvider: ctx.dataProvider, name: key } : { formDataProvider: fieldProvider(ctx, c.id), name: "v" }),
+        },
+      });
+    }
+    return { key: "a2ui:ChoicePicker", nodes };
+  },
+
+  Slider: (c, ctx) => {
+    const attributes: Record<string, string> = {
+      type: "range",
+      name: "v",
+      formDataProvider: fieldProvider(ctx, c.id),
+      min: literal(c, "min") ?? "0",
+    };
+    const max = literal(c, "max");
+    if (max) attributes.max = max;
+    const label = labelText(c, "label");
+    if (label) attributes.label = label;
+    return {
+      key: "a2ui:Slider",
+      nodes: [bridge(ctx, c, boundPath(c, "value"), "number"), { tagName: "sonic-input", attributes }],
+    };
+  },
+
+  DateTimeInput: (c, ctx) => {
+    const date = c.enableDate === true;
+    const time = c.enableTime === true;
+    const attributes: Record<string, string> = { formDataProvider: ctx.dataProvider, name: boundPath(c, "value") };
+    const label = labelText(c, "label");
+    if (label) attributes.label = label;
+    for (const bound of ["min", "max"]) {
+      const v = literal(c, bound);
+      if (v) attributes[bound] = v;
+    }
+    return { key: date && !time ? "a2ui:DateTimeInput.date" : time && !date ? "a2ui:DateTimeInput.time" : "a2ui:DateTimeInput", attributes };
+  },
+
+  Tabs: (c) => {
+    const tabs = Array.isArray(c.tabs) ? (c.tabs as { title?: unknown }[]) : [];
+    const titles = tabs.map((t, i) => {
+      if (typeof t?.title !== "string") throw new A2uiUnsupportedError(`Tabs.tabs[${i}].title: bindings are not supported yet`, c.id);
+      return t.title;
+    });
+    return { key: "a2ui:Tabs", attributes: { titles: JSON.stringify(titles) } };
+  },
+
+  Modal: () => ({ key: "a2ui:Modal" }),
 };
 
 /** Components of the basic catalog not mapped yet. */
-export const UNSUPPORTED_COMPONENTS = [
-  "CheckBox",
-  "ChoicePicker",
-  "DateTimeInput",
-  "Slider",
-  "Tabs",
-  "Modal",
-  "Video",
-  "AudioPlayer",
-] as const;
+export const UNSUPPORTED_COMPONENTS = ["Video", "AudioPlayer"] as const;
 
 export const SUPPORTED_COMPONENTS = Object.keys(mappers);
 
@@ -193,5 +303,11 @@ export function mapComponent(c: A2uiComponent, ctx: MapContext): SDUINode {
 export function childIdsOf(c: A2uiComponent): string[] {
   if (Array.isArray(c.children)) return c.children;
   if (typeof c.child === "string") return [c.child];
+  if (c.component === "Tabs" && Array.isArray(c.tabs)) {
+    return (c.tabs as { child?: unknown }[]).map((t) => t?.child).filter((x): x is string => typeof x === "string");
+  }
+  if (c.component === "Modal") {
+    return [c.trigger, c.content].filter((x): x is string => typeof x === "string");
+  }
   return [];
 }

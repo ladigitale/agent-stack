@@ -60,7 +60,7 @@ it("reports unsupported components as errors without blocking the rest", () => {
     components: [
       { id: "root", component: "Column", children: ["ok", "nope"] },
       { id: "ok", component: "Text", text: "fine" },
-      { id: "nope", component: "Slider", value: { path: "/v" } },
+      { id: "nope", component: "Video", url: "https://x/v.mp4" },
     ],
   });
   expect(ids(r.ops)).toEqual(["root<-", "ok<root"]);

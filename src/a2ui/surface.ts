@@ -1,5 +1,5 @@
 import type { SDUINode, SDUIOp } from "@supersoniks/concorde/core/components/functional/sdui/types";
-import { A2uiUnsupportedError, mapComponent } from "./basic-catalog";
+import { A2uiUnsupportedError, childIdsOf, mapComponent } from "./basic-catalog";
 import { A2uiPathError, parsePointer, pointerToPath } from "./pointer";
 import type {
   A2uiAction,
@@ -227,6 +227,15 @@ export class A2uiSurface {
       resolved.children = { path, componentId: def.children.componentId };
     }
     if (typeof def.child === "string") resolved.child = this.instantiate(def.child, scope, key);
+    if (def.component === "Tabs" && Array.isArray(def.tabs)) {
+      resolved.tabs = (def.tabs as { child?: unknown }[]).map((t) =>
+        typeof t?.child === "string" ? { ...t, child: this.instantiate(t.child, scope, key) } : t
+      );
+    }
+    if (def.component === "Modal") {
+      if (typeof def.trigger === "string") resolved.trigger = this.instantiate(def.trigger, scope, key);
+      if (typeof def.content === "string") resolved.content = this.instantiate(def.content, scope, key);
+    }
     this.instances.set(id, resolved);
     return id;
   }
@@ -292,9 +301,7 @@ export class A2uiSurface {
 
 /** Child ids referenced directly (not through a template), in order. */
 function staticChildren(c: A2uiComponent): string[] {
-  if (Array.isArray(c.children)) return c.children;
-  if (typeof c.child === "string") return [c.child];
-  return [];
+  return childIdsOf(c);
 }
 
 function sameIds(a: string[], b: string[]) {
@@ -310,7 +317,9 @@ function resolvePaths(value: unknown, scope: string): unknown {
     return { path: obj.path.startsWith("/") ? obj.path : `${scope}/${obj.path}` };
   }
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) out[k] = k === "children" || k === "child" ? v : resolvePaths(v, scope);
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = k === "children" || k === "child" || k === "trigger" || k === "content" ? v : resolvePaths(v, scope);
+  }
   return out;
 }
 

@@ -58,3 +58,11 @@ Le profil safe refuse `js`, mais charge toujours les feuilles de style listées 
 ## 8. Les composants référencés ne sont pas enregistrés par `sonic-sdui`
 
 C'est attendu : SDUI ne fait que créer des balises. agent-stack enregistre donc lui-même les composants utilisés par ses libraries (`src/libraries/components.ts`). Ce point est noté parce qu'un catalogue (`component-catalog.json`) pourrait indiquer le module à importer pour chaque tag.
+
+## 9. `label` et `description` des composants de formulaire sont rendus en HTML
+
+`sonic-input`, `sonic-textarea`, `sonic-checkbox`, `sonic-select`, `sonic-divider`, `sonic-card-header`, `sonic-legend`, `sonic-group` passent `label` / `description` à `unsafeHTML`. Ce sont des attributs : le profil safe ne les filtre pas. Un libellé fourni par un agent (`<img src=x onerror=…>`) est donc interprété.
+
+**Contournement dans agent-stack :** les libellés A2UI sont échappés avant d'être posés en attribut (`escapeHtml`).
+
+**Proposition :** en `profile="safe"`, faire de même dans `sonic-sdui` (échapper ces attributs), ou ajouter aux composants un mode texte.

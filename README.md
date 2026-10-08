@@ -81,13 +81,19 @@ Chaque surface A2UI devient un `<sonic-sdui profile="safe" partial>`. Son data m
 | `action.event` | `action` sur le nœud, puis `sdui-action`, puis message `action` A2UI avec un `context` résolu |
 | `Text` lié à un chemin | `<a2ui-text>`, toujours en texte brut |
 | `TextField` lié à un chemin | `sonic-input` / `sonic-textarea` + `formDataProvider` + `name` |
+| `CheckBox`, `ChoicePicker` (exclusif), `Slider` | champ Concorde (`sonic-checkbox`, `sonic-radio`, `sonic-input type=range`) sur un provider de travail, et `<a2ui-bridge>` qui convertit (booléen, liste d'une valeur, nombre) |
+| `ChoicePicker` (`multipleSelection`) | `sonic-checkbox` liés directement (tableau de valeurs) |
+| `DateTimeInput` | `sonic-input` `date` / `time` / `datetime-local` |
+| `Tabs`, `Modal` | `<a2ui-tabs>` / `<a2ui-modal>` : les enfants restent gérés par `sonic-sdui`, l'élément les répartit dans les slots de son shadow DOM |
 | `children: {path, componentId}` (gabarit) | une instance du sous-arbre par élément du tableau (ids `<id>@<liste>/<i>`, chemins relatifs rendus absolus), réémise quand la longueur change ; listes imbriquées possibles |
 
 ### Composants supportés (catalogue de base)
 
-Supportés : `Row`, `Column`, `List` (enfants statiques ou gabarit), `Text`, `Card`, `Divider`, `Icon`, `Image`, `Button`, `TextField`.
+Supportés : `Row`, `Column`, `List` (enfants statiques ou gabarit), `Text`, `Card`, `Divider`, `Icon`, `Image`, `Button`, `TextField`, `CheckBox`, `ChoicePicker`, `Slider`, `DateTimeInput`, `Tabs`, `Modal`.
 
-Pas encore supportés, avec une erreur `UNSUPPORTED_COMPONENT` renvoyée à l'agent : `CheckBox`, `ChoicePicker`, `DateTimeInput`, `Slider`, `Tabs`, `Modal`, `Video`, `AudioPlayer`, les `checks` (ignorés, avec un avertissement), les fonctions (`formatString`…) et les liaisons sur les props autres que du texte.
+Pas encore supportés, avec une erreur `UNSUPPORTED_COMPONENT` renvoyée à l'agent : `Video`, `AudioPlayer`, les `checks` (ignorés, avec un avertissement), les fonctions (`formatString`…) et les liaisons sur les props autres que du texte.
+
+Les libellés passés à des attributs que Concorde rend en HTML (`label`) sont échappés : ils s'affichent toujours en texte.
 
 Tout problème est signalé, à l'agent sous forme d'erreur A2UI ou à l'application via `onWarning`. Rien n'échoue en silence.
 
