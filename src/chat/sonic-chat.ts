@@ -27,6 +27,9 @@ const chatCss = `
  *
  * Set `transport` (property) to plug another transport; otherwise `endpoint`
  * is used with `HttpAgUiTransport`. `headers` (property) is sent with each run.
+ * `forwardedProps` (property) is merged into every run (app context, e.g. the
+ * artifact being edited). Other `CUSTOM` events surface as a `chat-custom`
+ * DOM event `{name, value}`.
  */
 export class SonicChat extends LitElement {
   static properties = {
@@ -34,12 +37,14 @@ export class SonicChat extends LitElement {
     placeholder: { type: String },
     transport: { attribute: false },
     headers: { attribute: false },
+    forwardedProps: { attribute: false },
   };
 
   endpoint = "";
   placeholder = "Votre message…";
   transport?: AgentTransport;
   headers?: Record<string, string>;
+  forwardedProps?: Record<string, unknown>;
 
   session?: ChatSession;
   private draft = "";
@@ -68,8 +73,11 @@ export class SonicChat extends LitElement {
       this.session?.destroy();
       this.session = new ChatSession({
         transport,
+        forwardedProps: () => this.forwardedProps ?? {},
         onChange: () => this.requestUpdate(),
         onWarning: (w) => console.warn(`sonic-chat: ${w}`),
+        onCustom: (name, value) =>
+          this.dispatchEvent(new CustomEvent("chat-custom", { detail: { name, value }, bubbles: true, composed: true })),
       });
     }
   }

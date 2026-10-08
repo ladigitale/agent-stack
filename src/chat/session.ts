@@ -22,8 +22,12 @@ export type ChatSessionOptions = {
   threadId?: string;
   /** Extra AG-UI context sent with each run. */
   context?: RunAgentInput["context"];
+  /** Extra `forwardedProps` merged into each run (read at run time). */
+  forwardedProps?: () => Record<string, unknown>;
   onChange?: () => void;
   onWarning?: (message: string) => void;
+  /** Any other `CUSTOM` event (app-specific payloads, e.g. a document preview). */
+  onCustom?: (name: string, value: unknown) => void;
 };
 
 const uid = () =>
@@ -120,6 +124,10 @@ export class ChatSession {
       case "CUSTOM":
         if (event.name === A2UI_CARRIER) this.handleA2ui(event.value);
         else if (event.name === SDUI_CARRIER) this.handleSdui(event.value as SDUIDescriptor);
+        else {
+          this.options.onCustom?.(String(event.name), event.value);
+          return; // not a chat item: no change notification
+        }
         break;
       case "ACTIVITY_SNAPSHOT":
         if (event.activityType === A2UI_CARRIER) {
@@ -143,6 +151,7 @@ export class ChatSession {
     this.running = true;
     this.abort = new AbortController();
     const forwardedProps: Record<string, unknown> = {
+      ...this.options.forwardedProps?.(),
       ...forwarded,
       a2uiClientCapabilities: this.renderer.clientCapabilities,
     };

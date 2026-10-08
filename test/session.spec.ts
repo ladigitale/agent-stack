@@ -128,3 +128,17 @@ it("queues A2UI errors for the next run and shows run errors", async () => {
   expect(inputs[1].forwardedProps?.a2uiErrors).toEqual([expect.objectContaining({ code: "UNKNOWN_SURFACE" })]);
   expect(inputs[1].forwardedProps?.a2uiErrors).toHaveLength(1);
 });
+
+it("passes app-specific CUSTOM events through and merges forwardedProps", async () => {
+  const inputs: RunAgentInput[] = [];
+  const custom: [string, unknown][] = [];
+  const session = new ChatSession({
+    transport: new ReplayTransport((input) => (inputs.push(input), [{ type: "CUSTOM", name: "artifact-preview", value: { title: "X" } }])),
+    forwardedProps: () => ({ artifact: { slug: "quiz" } }),
+    onCustom: (name, value) => custom.push([name, value]),
+  });
+  await session.send("go");
+  expect(custom).toEqual([["artifact-preview", { title: "X" }]]);
+  expect(inputs[0].forwardedProps?.artifact).toEqual({ slug: "quiz" });
+  expect(session.items.filter((i) => i.kind === "ui")).toHaveLength(0);
+});

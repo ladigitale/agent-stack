@@ -35,6 +35,10 @@ Un clic sur une action déclenche un nouveau run, sans nouveau message utilisate
 
 Les erreurs (composant non supporté, surface inconnue, chemin invalide…) ne déclenchent pas de run. Elles sont jointes au run suivant dans `forwardedProps.a2uiErrors`, sous forme de tableau d'erreurs A2UI : `{ code, surfaceId, message, path? }`.
 
+### Contexte de l'application
+
+`sonic-chat` fusionne sa propriété `forwardedProps` dans chaque run : l'application y place son contexte (par exemple l'artefact en cours d'édition, `{"artifact": {"slug": "…"}}`).
+
 ## Réponse
 
 C'est un flux SSE : un événement AG-UI JSON par `data:`, séparé par une ligne vide. `data: [DONE]` est toléré en fin de flux.
@@ -58,7 +62,7 @@ data: {"type":"RUN_FINISHED","threadId":"…","runId":"…"}
 - `RUN_ERROR`, qui affiche un message d'erreur.
 - Les blocs d'interface décrits ci-dessous.
 
-Les autres événements sont ignorés sans erreur.
+Les autres événements sont ignorés sans erreur. Un `CUSTOM` d'un autre nom que `a2ui` / `sdui` est remonté à l'application par l'événement DOM `chat-custom` (`detail: {name, value}`) : c'est le canal des charges propres à l'application (aperçu d'un document, navigation…).
 
 ## Blocs d'interface
 
