@@ -1,6 +1,8 @@
 /**
  * Layout rules for the `a2ui-basic` and `chat` libraries. Selectors use
- * `:where()` (zero specificity) so any theme can override them.
+ * `:where()` (zero specificity) so any theme can override them, except the
+ * heading sizes: they must beat CSS resets such as Tailwind's preflight
+ * (`h1…h6 { font-size: inherit }`), so they keep the attribute's specificity.
  * Injected once per document by `injectAgentStackStyles()`.
  */
 export const agentStackCss = `
@@ -19,12 +21,12 @@ export const agentStackCss = `
 :where([data-a2ui-align="end"]) { align-items: flex-end; }
 :where([data-a2ui-align="stretch"]) { align-items: stretch; }
 :where([data-a2ui="Text"]) { margin: 0; }
-:where(h1[data-a2ui="Text"]) { font-size: var(--a2ui-h1, 2em); font-weight: 700; line-height: 1.2; }
-:where(h2[data-a2ui="Text"]) { font-size: var(--a2ui-h2, 1.5em); font-weight: 700; line-height: 1.25; }
-:where(h3[data-a2ui="Text"]) { font-size: var(--a2ui-h3, 1.25em); font-weight: 600; line-height: 1.3; }
-:where(h4[data-a2ui="Text"]) { font-size: var(--a2ui-h4, 1.1em); font-weight: 600; }
-:where(h5[data-a2ui="Text"]) { font-size: var(--a2ui-h5, 1em); font-weight: 600; }
-:where(small[data-a2ui="Text"]) { font-size: 0.85em; opacity: 0.8; }
+h1[data-a2ui="Text"] { font-size: var(--a2ui-h1, 2em); font-weight: 700; line-height: 1.2; }
+h2[data-a2ui="Text"] { font-size: var(--a2ui-h2, 1.5em); font-weight: 700; line-height: 1.25; }
+h3[data-a2ui="Text"] { font-size: var(--a2ui-h3, 1.25em); font-weight: 600; line-height: 1.3; }
+h4[data-a2ui="Text"] { font-size: var(--a2ui-h4, 1.1em); font-weight: 600; }
+h5[data-a2ui="Text"] { font-size: var(--a2ui-h5, 1em); font-weight: 600; }
+small[data-a2ui="Text"] { font-size: 0.85em; opacity: 0.8; }
 :where([data-chat="answer"]) { display: flex; flex-direction: column; gap: var(--a2ui-gap, 0.75rem); white-space: pre-wrap; }
 :where([data-chat="short-form"]) { display: flex; flex-direction: column; gap: var(--a2ui-gap, 0.75rem); }
 `;
