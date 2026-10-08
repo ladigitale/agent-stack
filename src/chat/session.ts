@@ -26,6 +26,8 @@ export type ChatSessionOptions = {
   forwardedProps?: () => Record<string, unknown>;
   onChange?: () => void;
   onWarning?: (message: string) => void;
+  /** Where to inject the UI blocks' CSS (the shadow root hosting the chat, if any). */
+  styleTarget?: Document | ShadowRoot;
   /** Any other `CUSTOM` event (app-specific payloads, e.g. a document preview). */
   onCustom?: (name: string, value: unknown) => void;
 };
@@ -65,6 +67,7 @@ export class ChatSession {
       resolveContainer: () => this.addUiBlock(),
       onClientMessage: (msg) => this.onA2uiClientMessage(msg),
       onWarning: (w) => options.onWarning?.(w),
+      styleTarget: options.styleTarget,
     });
   }
 

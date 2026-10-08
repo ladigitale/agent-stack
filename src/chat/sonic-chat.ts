@@ -55,9 +55,14 @@ export class SonicChat extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    injectAgentStackStyles();
-    injectChatStyles();
+    // Styles in the tree that hosts the chat (document or an app's shadow root).
+    const root = this.getRootNode();
+    this.styleRoot = root instanceof ShadowRoot ? root : document;
+    injectAgentStackStyles(this.styleRoot);
+    injectChatStyles(this.styleRoot);
   }
+
+  private styleRoot: Document | ShadowRoot = document;
 
   disconnectedCallback() {
     super.disconnectedCallback();
@@ -73,6 +78,7 @@ export class SonicChat extends LitElement {
       this.session?.destroy();
       this.session = new ChatSession({
         transport,
+        styleTarget: this.styleRoot,
         forwardedProps: () => this.forwardedProps ?? {},
         onChange: () => this.requestUpdate(),
         onWarning: (w) => console.warn(`sonic-chat: ${w}`),
@@ -144,12 +150,14 @@ export class SonicChat extends LitElement {
   };
 }
 
-function injectChatStyles(doc: Document = document) {
-  if (doc.getElementById("sonic-chat-styles")) return;
+function injectChatStyles(target: Document | ShadowRoot = document) {
+  if (target.getElementById("sonic-chat-styles")) return;
+  const doc = target instanceof Document ? target : target.ownerDocument;
   const style = doc.createElement("style");
   style.id = "sonic-chat-styles";
   style.textContent = chatCss;
-  doc.head.appendChild(style);
+  if (target instanceof Document) target.head.appendChild(style);
+  else target.appendChild(style);
 }
 
 if (!customElements.get("sonic-chat")) customElements.define("sonic-chat", SonicChat);
