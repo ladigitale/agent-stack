@@ -94,6 +94,8 @@ Gabarits `chat:*` :
 
 Les boutons portent une `action: { name, context }`, qui revient en `forwardedProps.sduiAction`.
 
-## Côté PHP (à venir)
+## Implémentation de référence
 
-Le paquet Composer prévu est un outil `render_ui` pour Symfony AI, qui émet `CUSTOM a2ui`, plus un émetteur SSE AG-UI (par exemple via `swisnl/ag-ui-server`). Il n'est pas encore écrit.
+Tadaaa (`apps/api/src/Agent`, `POST /api/agent/run`) : boucle d'agent avec les outils MCP de Tadaaa exécutés dans le process, l'outil `render_ui` (composants A2UI validés côté serveur avec les règles des artefacts, puis émis en `CUSTOM a2ui`) et un client LLM (Messages API d'Anthropic). Sans Symfony AI ni Node.
+
+Pour essayer `sonic-chat` contre un backend réel : `yarn dev`, puis `http://localhost:5173/live.html?endpoint=<url>&token=<jeton>`.
