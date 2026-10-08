@@ -90,9 +90,6 @@ const mappers: Record<string, Mapper> = {
   Row: (c) => ({ key: "a2ui:Row", attributes: flexAttributes(c) }),
   Column: (c) => ({ key: "a2ui:Column", attributes: flexAttributes(c) }),
   List: (c) => {
-    if (c.children && !Array.isArray(c.children)) {
-      throw new A2uiUnsupportedError("List: template children are not supported yet", c.id);
-    }
     const attributes = flexAttributes(c);
     if (literal(c, "direction") === "horizontal") attributes["data-a2ui-direction"] = "horizontal";
     return { key: "a2ui:List", attributes };

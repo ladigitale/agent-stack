@@ -81,12 +81,13 @@ Chaque surface A2UI devient un `<sonic-sdui profile="safe" partial>`. Son data m
 | `action.event` | `action` sur le nœud, puis `sdui-action`, puis message `action` A2UI avec un `context` résolu |
 | `Text` lié à un chemin | `<a2ui-text>`, toujours en texte brut |
 | `TextField` lié à un chemin | `sonic-input` / `sonic-textarea` + `formDataProvider` + `name` |
+| `children: {path, componentId}` (gabarit) | une instance du sous-arbre par élément du tableau (ids `<id>@<liste>/<i>`, chemins relatifs rendus absolus), réémise quand la longueur change ; listes imbriquées possibles |
 
 ### Composants supportés (catalogue de base)
 
-Supportés : `Row`, `Column`, `List` (enfants statiques), `Text`, `Card`, `Divider`, `Icon`, `Image`, `Button`, `TextField`.
+Supportés : `Row`, `Column`, `List` (enfants statiques ou gabarit), `Text`, `Card`, `Divider`, `Icon`, `Image`, `Button`, `TextField`.
 
-Pas encore supportés, avec une erreur `UNSUPPORTED_COMPONENT` renvoyée à l'agent : `CheckBox`, `ChoicePicker`, `DateTimeInput`, `Slider`, `Tabs`, `Modal`, `Video`, `AudioPlayer`, les listes avec template, les `checks` (ignorés, avec un avertissement), les fonctions (`formatString`…) et les liaisons sur les props autres que du texte.
+Pas encore supportés, avec une erreur `UNSUPPORTED_COMPONENT` renvoyée à l'agent : `CheckBox`, `ChoicePicker`, `DateTimeInput`, `Slider`, `Tabs`, `Modal`, `Video`, `AudioPlayer`, les `checks` (ignorés, avec un avertissement), les fonctions (`formatString`…) et les liaisons sur les props autres que du texte.
 
 Tout problème est signalé, à l'agent sous forme d'erreur A2UI ou à l'application via `onWarning`. Rien n'échoue en silence.
 
