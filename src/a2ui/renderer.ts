@@ -1,6 +1,7 @@
 import "@supersoniks/concorde/sdui";
 import type { SDUIOp } from "@supersoniks/concorde/core/components/functional/sdui/types";
 import { Objects, PublisherManager } from "@supersoniks/concorde/utils";
+import { injectAgentStackStyles } from "../libraries/styles";
 import { defineA2uiElements } from "./elements";
 import { A2uiSurface, type SurfaceResult } from "./surface";
 import {
@@ -15,7 +16,11 @@ type SduiElement = HTMLElement & { applyOp(op: SDUIOp): void };
 
 export type A2uiRendererOptions = {
   /** Element that receives one `<sonic-sdui>` per surface. */
-  container: HTMLElement;
+  container?: HTMLElement;
+  /** Picks the container of a new surface (e.g. the chat message it belongs to). Wins over `container`. */
+  resolveContainer?: (surfaceId: string) => HTMLElement;
+  /** Inject the layout CSS of the `a2ui-basic` library into the document. Default: true. */
+  injectStyles?: boolean;
   /** Called with every message to send back to the agent (actions, errors). */
   onClientMessage?: (msg: A2uiClientMessage) => void;
   /** Called with non-fatal notices (ignored features, approximations). */
@@ -37,6 +42,10 @@ export class A2uiRenderer {
 
   constructor(private readonly options: A2uiRendererOptions) {
     defineA2uiElements();
+    if (options.injectStyles !== false) injectAgentStackStyles();
+    if (!options.container && !options.resolveContainer) {
+      throw new Error("A2uiRenderer: `container` or `resolveContainer` is required");
+    }
     this.catalogs = new Set(options.supportedCatalogIds ?? [A2UI_BASIC_CATALOG_ID]);
   }
 
@@ -109,7 +118,8 @@ export class A2uiRenderer {
       this.options.onClientMessage?.({ version: A2UI_VERSION, action });
     };
     element.addEventListener("sdui-action", onAction);
-    this.options.container.appendChild(element);
+    const container = this.options.resolveContainer?.(surfaceId) ?? this.options.container!;
+    container.appendChild(element);
     this.surfaces.set(surfaceId, { surface, element, onAction });
   }
 

@@ -1,0 +1,35 @@
+{
+  "chat:answer": {
+    "tagName": "div",
+    "attributes": { "data-chat": "answer" }
+  },
+  "chat:result-card": {
+    "tagName": "sonic-card",
+    "attributes": { "data-chat": "result-card" },
+    "nodes": [
+      { "tagName": "sonic-card-header" },
+      { "tagName": "sonic-card-main" },
+      { "tagName": "sonic-card-footer" }
+    ],
+    "contentElementSelector": "sonic-card-main"
+  },
+  "chat:confirm": {
+    "tagName": "sonic-card",
+    "attributes": { "data-chat": "confirm" },
+    "nodes": [
+      { "tagName": "sonic-card-main" },
+      { "tagName": "sonic-card-footer", "nodes": [{ "tagName": "sonic-form-actions" }] }
+    ],
+    "contentElementSelector": "sonic-card-main"
+  },
+  "chat:short-form": {
+    "tagName": "div",
+    "attributes": { "data-chat": "short-form" },
+    "nodes": [{ "tagName": "sonic-form-layout" }, { "tagName": "sonic-form-actions" }],
+    "contentElementSelector": "sonic-form-layout"
+  },
+  "chat:actions": {
+    "tagName": "sonic-form-actions",
+    "attributes": { "data-chat": "actions" }
+  }
+}

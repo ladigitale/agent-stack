@@ -11,6 +11,9 @@ for (const target of [g, g.window as Record<string, unknown> | undefined]) {
   target.DecompressionStream ??= DecompressionStream;
 }
 
+// Concorde components finish async work (ancestor lookups, storage cleanup)
+// after a test ends: unmount and let it settle before jsdom is torn down.
 afterEach(async () => {
-  await new Promise((r) => setTimeout(r, 0));
+  document.body.innerHTML = "";
+  for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0));
 });

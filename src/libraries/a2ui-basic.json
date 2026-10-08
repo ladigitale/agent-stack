@@ -1,0 +1,23 @@
+{
+  "a2ui:Row": { "tagName": "div", "attributes": { "data-a2ui": "Row" } },
+  "a2ui:Column": { "tagName": "div", "attributes": { "data-a2ui": "Column" } },
+  "a2ui:List": { "tagName": "div", "attributes": { "data-a2ui": "List" } },
+  "a2ui:Text": { "tagName": "p", "attributes": { "data-a2ui": "Text" } },
+  "a2ui:Text.h1": { "tagName": "h1", "attributes": { "data-a2ui": "Text" } },
+  "a2ui:Text.h2": { "tagName": "h2", "attributes": { "data-a2ui": "Text" } },
+  "a2ui:Text.h3": { "tagName": "h3", "attributes": { "data-a2ui": "Text" } },
+  "a2ui:Text.h4": { "tagName": "h4", "attributes": { "data-a2ui": "Text" } },
+  "a2ui:Text.h5": { "tagName": "h5", "attributes": { "data-a2ui": "Text" } },
+  "a2ui:Text.caption": { "tagName": "small", "attributes": { "data-a2ui": "Text" } },
+  "a2ui:Card": { "tagName": "sonic-card", "attributes": { "data-a2ui": "Card" } },
+  "a2ui:Divider": { "tagName": "sonic-divider", "attributes": { "data-a2ui": "Divider" } },
+  "a2ui:Icon": { "tagName": "sonic-icon", "attributes": { "data-a2ui": "Icon" } },
+  "a2ui:Image": { "tagName": "sonic-image", "attributes": { "data-a2ui": "Image" } },
+  "a2ui:Button": { "tagName": "sonic-button", "attributes": { "data-a2ui": "Button" } },
+  "a2ui:Button.primary": { "tagName": "sonic-button", "attributes": { "data-a2ui": "Button", "type": "primary" } },
+  "a2ui:Button.borderless": { "tagName": "sonic-button", "attributes": { "data-a2ui": "Button", "variant": "ghost" } },
+  "a2ui:TextField": { "tagName": "sonic-input", "attributes": { "data-a2ui": "TextField" } },
+  "a2ui:TextField.number": { "tagName": "sonic-input", "attributes": { "data-a2ui": "TextField", "type": "number" } },
+  "a2ui:TextField.obscured": { "tagName": "sonic-input", "attributes": { "data-a2ui": "TextField", "type": "password" } },
+  "a2ui:TextField.longText": { "tagName": "sonic-textarea", "attributes": { "data-a2ui": "TextField" } }
+}

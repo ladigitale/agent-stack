@@ -4,9 +4,15 @@
   "description": "Branche des agents IA sur le SDUI de @supersoniks/concorde : adaptateur A2UI, libraries SDUI, chat AG-UI.",
   "type": "module",
   "license": "MIT",
-  "files": ["src", "docs"],
+  "files": [
+    "src",
+    "docs"
+  ],
   "exports": {
-    "./a2ui": "./src/a2ui/index.ts"
+    "./a2ui": "./src/a2ui/index.ts",
+    "./libraries": "./src/libraries/index.ts",
+    "./libraries/a2ui-basic.json": "./src/libraries/a2ui-basic.json",
+    "./libraries/chat.json": "./src/libraries/chat.json"
   },
   "scripts": {
     "test": "vitest run",
