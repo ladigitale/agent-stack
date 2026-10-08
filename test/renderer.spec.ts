@@ -139,3 +139,22 @@ it("accepts JSONL chunks", async () => {
   await tick();
   expect(q("root")?.textContent).toBe("jsonl");
 });
+
+it("keeps renderers apart with a data provider prefix and a shadow-root style target", async () => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const shadow = host.attachShadow({ mode: "open" });
+  const container = document.createElement("div");
+  shadow.appendChild(container);
+  const renderer = new A2uiRenderer({ container, styleTarget: shadow, dataProviderPrefix: "embed1__a2ui_" });
+  renderer.handle(create());
+  renderer.handle({ version: v, updateDataModel: { surfaceId: "main", path: "/", value: { t: "isolé" } } });
+  renderer.handle({
+    version: v,
+    updateComponents: { surfaceId: "main", components: [{ id: "root", component: "Text", text: { path: "/t" } }] },
+  });
+  await tick();
+  expect(PublisherManager.get("embed1__a2ui_main").get()).toEqual({ t: "isolé" });
+  expect(container.querySelector('[data-sdui-node-id="root"]')?.textContent).toBe("isolé");
+  expect(shadow.getElementById("agent-stack-styles")).not.toBeNull();
+});

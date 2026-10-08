@@ -20,8 +20,8 @@ export type SurfaceResult = {
 };
 
 /** Concorde publisher ids cannot contain "." — derive a safe one per surface. */
-export function dataProviderIdFor(surfaceId: string): string {
-  return `a2ui_${surfaceId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+export function dataProviderIdFor(surfaceId: string, prefix = "a2ui_"): string {
+  return `${prefix}${surfaceId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
 /**

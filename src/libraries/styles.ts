@@ -25,10 +25,16 @@ export const agentStackCss = `
 
 const STYLE_ID = "agent-stack-styles";
 
-export function injectAgentStackStyles(doc: Document = document) {
-  if (doc.getElementById(STYLE_ID)) return;
+/**
+ * Injects the layout CSS once per target. Pass the ShadowRoot when the
+ * surfaces are rendered inside a shadow tree (document styles do not pierce it).
+ */
+export function injectAgentStackStyles(target: Document | ShadowRoot = document) {
+  if (target.getElementById(STYLE_ID)) return;
+  const doc = target instanceof Document ? target : target.ownerDocument;
   const style = doc.createElement("style");
   style.id = STYLE_ID;
   style.textContent = agentStackCss;
-  doc.head.appendChild(style);
+  if (target instanceof Document) target.head.appendChild(style);
+  else target.appendChild(style);
 }

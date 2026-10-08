@@ -4,7 +4,7 @@ import type { SDUIOp } from "@supersoniks/concorde/core/components/functional/sd
 import { Objects, PublisherManager } from "@supersoniks/concorde/utils";
 import { injectAgentStackStyles } from "../libraries/styles";
 import { defineA2uiElements } from "./elements";
-import { A2uiSurface, type SurfaceResult } from "./surface";
+import { A2uiSurface, dataProviderIdFor, type SurfaceResult } from "./surface";
 import {
   A2UI_BASIC_CATALOG_ID,
   A2UI_VERSION,
@@ -20,8 +20,15 @@ export type A2uiRendererOptions = {
   container?: HTMLElement;
   /** Picks the container of a new surface (e.g. the chat message it belongs to). Wins over `container`. */
   resolveContainer?: (surfaceId: string) => HTMLElement;
-  /** Inject the layout CSS of the `a2ui-basic` library into the document. Default: true. */
+  /** Inject the layout CSS of the `a2ui-basic` library. Default: true. */
   injectStyles?: boolean;
+  /** Where to inject that CSS: the document (default) or the ShadowRoot hosting the surfaces. */
+  styleTarget?: Document | ShadowRoot;
+  /**
+   * Prefix of the data provider of each surface (`<prefix><surfaceId>`), to keep
+   * several renderers on one page apart. Default: "a2ui_".
+   */
+  dataProviderPrefix?: string;
   /** Called with every message to send back to the agent (actions, errors). */
   onClientMessage?: (msg: A2uiClientMessage) => void;
   /** Called with non-fatal notices (ignored features, approximations). */
@@ -43,7 +50,7 @@ export class A2uiRenderer {
 
   constructor(private readonly options: A2uiRendererOptions) {
     defineA2uiElements();
-    if (options.injectStyles !== false) injectAgentStackStyles();
+    if (options.injectStyles !== false) injectAgentStackStyles(options.styleTarget);
     if (!options.container && !options.resolveContainer) {
       throw new Error("A2uiRenderer: `container` or `resolveContainer` is required");
     }
@@ -106,7 +113,7 @@ export class A2uiRenderer {
       this.sendError({ code: "UNSUPPORTED_CATALOG", surfaceId, message: `Catalog "${catalogId}" is not supported` });
       return;
     }
-    const surface = new A2uiSurface(surfaceId);
+    const surface = new A2uiSurface(surfaceId, dataProviderIdFor(surfaceId, this.options.dataProviderPrefix));
     const element = document.createElement("sonic-sdui") as SduiElement;
     element.setAttribute("profile", "safe");
     element.setAttribute("partial", "");
