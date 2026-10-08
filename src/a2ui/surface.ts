@@ -38,7 +38,12 @@ export class A2uiSurface {
   private components = new Map<string, A2uiComponent>();
   private emitted = new Set<string>();
 
-  constructor(readonly surfaceId: string, dataProvider = dataProviderIdFor(surfaceId)) {
+  constructor(
+    readonly surfaceId: string,
+    dataProvider = dataProviderIdFor(surfaceId),
+    /** Renames emitted tags (e.g. `sonic-card` → `afx-card` in a prefixed Concorde build). */
+    private readonly mapTag: (tag: string) => string = (t) => t
+  ) {
     this.dataProvider = dataProvider;
   }
 
@@ -121,10 +126,13 @@ export class A2uiSurface {
 
   private toNode(c: A2uiComponent, result: SurfaceResult): SDUINode | null {
     try {
-      const node = mapComponent(c, {
-        dataProvider: this.dataProvider,
-        warn: (m) => result.warnings.push(m),
-      });
+      const node = renameTags(
+        mapComponent(c, {
+          dataProvider: this.dataProvider,
+          warn: (m) => result.warnings.push(m),
+        }),
+        this.mapTag
+      );
       node.nodeId = c.id;
       const children = childIdsOf(c);
       if (children.length) node.childNodeIds = [...children];
@@ -159,4 +167,10 @@ export class A2uiSurface {
     }
     return parents;
   }
+}
+
+function renameTags(node: SDUINode, mapTag: (tag: string) => string): SDUINode {
+  if (node.tagName) node.tagName = mapTag(node.tagName);
+  node.nodes?.forEach((child) => renameTags(child, mapTag));
+  return node;
 }

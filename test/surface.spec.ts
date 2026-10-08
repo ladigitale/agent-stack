@@ -78,3 +78,15 @@ it("maps data model updates", () => {
   });
   expect(s.updateDataModel({ path: "/a.b", value: 1 }).errors[0].code).toBe("VALIDATION_FAILED");
 });
+
+it("renames tags for prefixed Concorde builds", () => {
+  const s = new A2uiSurface("main", "dp", (t) => t.replace(/^sonic-/, "afx-"));
+  const r = s.updateComponents({
+    components: [
+      { id: "root", component: "Card", child: "t" },
+      { id: "t", component: "Text", text: { path: "/x" } },
+    ],
+  });
+  const tags = JSON.stringify(r.ops).match(/"tagName":"[^"]+"/g);
+  expect(tags).toEqual(['"tagName":"afx-card"', '"tagName":"p"', '"tagName":"a2ui-text"']);
+});

@@ -29,6 +29,12 @@ export type A2uiRendererOptions = {
    * several renderers on one page apart. Default: "a2ui_".
    */
   dataProviderPrefix?: string;
+  /**
+   * Renames the Concorde tags the renderer creates (`sonic-sdui`, and every tag
+   * of the expanded library entries). For Concorde builds with another
+   * component prefix, e.g. `(t) => t.replace(/^sonic-/, "afx-")`.
+   */
+  mapTag?: (tag: string) => string;
   /** Called with every message to send back to the agent (actions, errors). */
   onClientMessage?: (msg: A2uiClientMessage) => void;
   /** Called with non-fatal notices (ignored features, approximations). */
@@ -113,8 +119,9 @@ export class A2uiRenderer {
       this.sendError({ code: "UNSUPPORTED_CATALOG", surfaceId, message: `Catalog "${catalogId}" is not supported` });
       return;
     }
-    const surface = new A2uiSurface(surfaceId, dataProviderIdFor(surfaceId, this.options.dataProviderPrefix));
-    const element = document.createElement("sonic-sdui") as SduiElement;
+    const mapTag = this.options.mapTag ?? ((t: string) => t);
+    const surface = new A2uiSurface(surfaceId, dataProviderIdFor(surfaceId, this.options.dataProviderPrefix), mapTag);
+    const element = document.createElement(mapTag("sonic-sdui")) as SduiElement;
     element.setAttribute("profile", "safe");
     element.setAttribute("partial", "");
     element.setAttribute("data-a2ui-surface", surfaceId);
