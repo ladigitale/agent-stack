@@ -30,6 +30,8 @@ export type ChatSessionOptions = {
   styleTarget?: Document | ShadowRoot;
   /** Any other `CUSTOM` event (app-specific payloads, e.g. a document preview). */
   onCustom?: (name: string, value: unknown) => void;
+  /** `RUN_ERROR` (and transport failures), with the backend's `code` when it sends one. */
+  onRunError?: (error: { message: string; code?: string }) => void;
 };
 
 const uid = () =>
@@ -139,6 +141,10 @@ export class ChatSession {
         break;
       case "RUN_ERROR":
         this.push({ kind: "error", id: uid(), message: String(event.message) });
+        this.options.onRunError?.({
+          message: String(event.message),
+          ...(typeof event.code === "string" ? { code: event.code } : {}),
+        });
         break;
       default:
         return; // ignored event: no change notification
@@ -171,7 +177,9 @@ export class ChatSession {
       for await (const event of this.options.transport.run(input, this.abort.signal)) this.apply(event);
     } catch (e) {
       if ((e as Error)?.name !== "AbortError") {
-        this.push({ kind: "error", id: uid(), message: String((e as Error)?.message ?? e) });
+        const message = String((e as Error)?.message ?? e);
+        this.push({ kind: "error", id: uid(), message });
+        this.options.onRunError?.({ message });
       }
     } finally {
       for (const item of this.textItems.values()) if (item.streaming) this.commitText(item);

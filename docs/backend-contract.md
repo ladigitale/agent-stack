@@ -59,7 +59,7 @@ data: {"type":"RUN_FINISHED","threadId":"…","runId":"…"}
 
 - `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END` et `TEXT_MESSAGE_CHUNK`. Le texte est toujours affiché en texte brut.
 - `TOOL_CALL_START` et `TOOL_CALL_END`, qui affichent une ligne d'état discrète.
-- `RUN_ERROR`, qui affiche un message d'erreur.
+- `RUN_ERROR`, qui affiche un message d'erreur. Un `code` éventuel (ex. `AGENT_NOT_CONFIGURED`) est transmis à l'application par l'événement DOM `chat-run-error` (`detail: {message, code}`).
 - Les blocs d'interface décrits ci-dessous.
 
 Les autres événements sont ignorés sans erreur. Un `CUSTOM` d'un autre nom que `a2ui` / `sdui` est remonté à l'application par l'événement DOM `chat-custom` (`detail: {name, value}`) : c'est le canal des charges propres à l'application (aperçu d'un document, navigation…).

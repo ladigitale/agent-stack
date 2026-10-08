@@ -142,3 +142,13 @@ it("passes app-specific CUSTOM events through and merges forwardedProps", async 
   expect(inputs[0].forwardedProps?.artifact).toEqual({ slug: "quiz" });
   expect(session.items.filter((i) => i.kind === "ui")).toHaveLength(0);
 });
+
+it("reports run errors with their code", async () => {
+  const errors: unknown[] = [];
+  const session = new ChatSession({
+    transport: new ReplayTransport(() => [{ type: "RUN_ERROR", message: "Assistant non configuré", code: "AGENT_NOT_CONFIGURED" }]),
+    onRunError: (e) => errors.push(e),
+  });
+  await session.send("x");
+  expect(errors).toEqual([{ message: "Assistant non configuré", code: "AGENT_NOT_CONFIGURED" }]);
+});

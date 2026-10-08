@@ -29,7 +29,7 @@ const chatCss = `
  * is used with `HttpAgUiTransport`. `headers` (property) is sent with each run.
  * `forwardedProps` (property) is merged into every run (app context, e.g. the
  * artifact being edited). Other `CUSTOM` events surface as a `chat-custom`
- * DOM event `{name, value}`.
+ * DOM event `{name, value}`; run errors as `chat-run-error` `{message, code?}`.
  */
 export class SonicChat extends LitElement {
   static properties = {
@@ -86,6 +86,8 @@ export class SonicChat extends LitElement {
         onWarning: (w) => console.warn(`sonic-chat: ${w}`),
         onCustom: (name, value) =>
           this.dispatchEvent(new CustomEvent("chat-custom", { detail: { name, value }, bubbles: true, composed: true })),
+        onRunError: (error) =>
+          this.dispatchEvent(new CustomEvent("chat-run-error", { detail: error, bubbles: true, composed: true })),
       });
     }
   }
