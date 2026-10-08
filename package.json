@@ -12,12 +12,14 @@
     "./a2ui": "./src/a2ui/index.ts",
     "./libraries": "./src/libraries/index.ts",
     "./libraries/a2ui-basic.json": "./src/libraries/a2ui-basic.json",
-    "./libraries/chat.json": "./src/libraries/chat.json"
+    "./libraries/chat.json": "./src/libraries/chat.json",
+    "./chat": "./src/chat/index.ts"
   },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev": "vite demo"
   },
   "peerDependencies": {
     "@supersoniks/concorde": "^5.1.0",
