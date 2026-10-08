@@ -38,3 +38,19 @@ it("injects its styles into the shadow root that hosts it", async () => {
   expect(shadow.getElementById("sonic-chat-styles")).not.toBeNull();
   expect(shadow.getElementById("agent-stack-styles")).not.toBeNull();
 });
+
+it("keeps the conversation when headers or forwardedProps change", async () => {
+  const el = document.createElement("sonic-chat");
+  el.transport = new ReplayTransport(() => [
+    { type: "TEXT_MESSAGE_START", messageId: "a", role: "assistant" },
+    { type: "TEXT_MESSAGE_CONTENT", messageId: "a", delta: "ok" },
+    { type: "TEXT_MESSAGE_END", messageId: "a" },
+  ]);
+  document.body.appendChild(el);
+  await el.updateComplete;
+  await el.send("hello");
+  el.headers = { Authorization: "Bearer x" };
+  el.forwardedProps = { artifact: { slug: "abc" } };
+  await el.updateComplete;
+  expect(el.querySelectorAll("[data-chat-msg]")).toHaveLength(2);
+});

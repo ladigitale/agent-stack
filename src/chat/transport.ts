@@ -8,7 +8,8 @@ export interface AgentTransport {
 
 export type HttpTransportOptions = {
   url: string;
-  headers?: Record<string, string>;
+  /** Static headers, or a function read before each run (e.g. a token that changes). */
+  headers?: Record<string, string> | (() => Record<string, string> | undefined);
   /** Defaults to "same-origin" so a PHP session cookie is sent. */
   credentials?: RequestCredentials;
 };
@@ -20,7 +21,11 @@ export class HttpAgUiTransport implements AgentTransport {
   async *run(input: RunAgentInput, signal?: AbortSignal): AsyncIterable<AgUiEvent> {
     const response = await fetch(this.options.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream", ...this.options.headers },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        ...(typeof this.options.headers === "function" ? this.options.headers() : this.options.headers),
+      },
       credentials: this.options.credentials ?? "same-origin",
       body: JSON.stringify(input),
       signal,

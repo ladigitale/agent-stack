@@ -71,9 +71,11 @@ export class SonicChat extends LitElement {
   }
 
   protected willUpdate(changed: PropertyValues) {
-    if (!this.session || changed.has("transport") || changed.has("endpoint") || changed.has("headers")) {
+    // Headers and forwardedProps are read at run time: changing them keeps the conversation.
+    if (!this.session || changed.has("transport") || changed.has("endpoint")) {
       const transport =
-        this.transport ?? (this.endpoint ? new HttpAgUiTransport({ url: this.endpoint, headers: this.headers }) : undefined);
+        this.transport ??
+        (this.endpoint ? new HttpAgUiTransport({ url: this.endpoint, headers: () => this.headers }) : undefined);
       if (!transport) return;
       this.session?.destroy();
       this.session = new ChatSession({
