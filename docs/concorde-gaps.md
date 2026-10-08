@@ -40,3 +40,21 @@ Pour un agent, c'est une faille : le data model est contrôlé par l'agent, au m
 **Contournement dans agent-stack :** l'élément `<a2ui-text>` affiche la valeur via `textContent`.
 
 **Proposition :** en `profile="safe"`, soit interdire `sonic-value`, soit lui ajouter un mode texte (`as="text"`) et l'imposer dans ce profil.
+
+## 6. `descriptor.css` est chargé en profil safe
+
+Le profil safe refuse `js`, mais charge toujours les feuilles de style listées dans `descriptor.css`. Si un agent fournit un descripteur entier (bloc `sdui` du chat), il peut donc charger une CSS externe : c'est du suivi possible, voire de l'exfiltration par sélecteurs d'attributs.
+
+**Proposition :** en `profile="safe"`, ignorer `css`, avec un avertissement, comme pour `js`.
+
+## 7. Pas de moyen synchrone de fournir une library en mode incrémental
+
+À la première opération, Concorde clone le descripteur courant, et y met la library par défaut s'il n'y en a pas. Si on passe une library via `props` juste avant, elle n'est prise en compte qu'après le `willUpdate` de Lit, et `updateContents` peut encore effacer le DOM après les premières opérations.
+
+**Contournement dans agent-stack :** l'adaptateur A2UI développe les entrées de la library directement dans les nœuds, au lieu de passer par `libraryKey`.
+
+**Proposition :** une propriété `library` sur `sonic-sdui`, lue par `beginIncremental`.
+
+## 8. Les composants référencés ne sont pas enregistrés par `sonic-sdui`
+
+C'est attendu : SDUI ne fait que créer des balises. agent-stack enregistre donc lui-même les composants utilisés par ses libraries (`src/libraries/components.ts`). Ce point est noté parce qu'un catalogue (`component-catalog.json`) pourrait indiquer le module à importer pour chaque tag.

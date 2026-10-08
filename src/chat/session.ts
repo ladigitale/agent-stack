@@ -1,4 +1,5 @@
 import "@supersoniks/concorde/sdui";
+import "../libraries/components";
 import type { SDUIDescriptor } from "@supersoniks/concorde/core/components/functional/sdui/types";
 import { A2uiRenderer } from "../a2ui/renderer";
 import type { A2uiClientError, A2uiClientMessage, A2uiServerMessage } from "../a2ui/types";

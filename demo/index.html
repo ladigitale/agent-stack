@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>agent-stack — démo</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body { font-family: system-ui, sans-serif; }
+      sonic-theme { display: block; height: 100%; }
+      main { max-width: 44rem; height: 100%; margin: 0 auto; padding: 1rem; box-sizing: border-box; display: flex; flex-direction: column; gap: 0.5rem; }
+      sonic-chat { flex: 1; }
+      .hint { font-size: 0.85em; opacity: 0.7; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <sonic-theme>
+      <main>
+        <h1>agent-stack</h1>
+        <p class="hint">Flux AG-UI rejoué localement (aucun backend). Essayez « places pour samedi ».</p>
+        <sonic-chat></sonic-chat>
+      </main>
+    </sonic-theme>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,4 +1,5 @@
 import "@supersoniks/concorde/sdui";
+import "../libraries/components";
 import type { SDUIOp } from "@supersoniks/concorde/core/components/functional/sdui/types";
 import { Objects, PublisherManager } from "@supersoniks/concorde/utils";
 import { injectAgentStackStyles } from "../libraries/styles";
