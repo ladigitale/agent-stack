@@ -20,7 +20,9 @@ const chatCss = `
 :where(sonic-chat [data-chat-tool], sonic-chat [data-chat-status]) { display: flex; align-items: center; gap: 0.5rem; }
 :where(sonic-chat [data-chat-status]) { font-size: 0.9em; opacity: 0.85; align-self: flex-start; padding: 0.25rem 0.5rem; }
 :where(sonic-chat [data-chat-status] [data-chat-elapsed]) { opacity: 0.6; font-variant-numeric: tabular-nums; }
-:where(sonic-chat [data-chat-spinner]) { flex: none; width: 0.9em; height: 0.9em; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: sonic-chat-spin 0.8s linear infinite; }
+:where(sonic-chat [data-chat-spinner]) { flex: none; width: 0.9em; height: 0.9em; border-radius: 50%; animation: sonic-chat-spin 0.8s linear infinite; }
+/* Pas de :where() ici : doit l'emporter sur un reset « * { border-width: 0 } » (Tailwind preflight). */
+sonic-chat [data-chat-spinner] { box-sizing: border-box; border: 2px solid currentColor; border-right-color: transparent; }
 :where(sonic-chat [data-chat-tool-done]) { flex: none; width: 0.9em; text-align: center; color: var(--sc-success, currentColor); }
 @keyframes sonic-chat-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { :where(sonic-chat [data-chat-spinner]) { animation-duration: 3s; } }
@@ -157,11 +159,15 @@ export class SonicChat extends LitElement {
         return html`<div data-chat-msg=${item.role} ?data-streaming=${item.streaming}>${item.text}</div>`;
       case "ui":
         return html`<div data-chat-block>${item.host}</div>`;
-      case "tool":
+      case "tool": {
+        // Un outil en cours est déjà montré par la ligne d'état (une seule animation).
+        const status = this.session?.status;
+        if (!item.done && status?.phase === "tool" && status.tool === item) return nothing;
         return html`<div data-chat-tool>
           ${item.done ? html`<span data-chat-tool-done aria-hidden="true">✓</span>` : html`<span data-chat-spinner aria-hidden="true"></span>`}
           <span>${this.toolLabel(item)}</span>
         </div>`;
+      }
       case "error":
         return html`<div data-chat-error role="alert">${item.message}</div>`;
       default:

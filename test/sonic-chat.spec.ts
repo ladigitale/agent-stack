@@ -87,7 +87,7 @@ it("shows what the agent is doing while it works", async () => {
   await tick();
   await el.updateComplete;
   expect(status()?.textContent).toContain("Création depuis le kit « quiz »…");
-  expect(el.querySelector("[data-chat-tool] [data-chat-spinner]")).not.toBeNull();
+  expect(el.querySelector("[data-chat-status] [data-chat-spinner]")).not.toBeNull();
   release();
   await tick();
   await el.updateComplete;
