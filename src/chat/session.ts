@@ -10,11 +10,21 @@ import type { AgentTransport } from "./transport";
 /** Names under which UI payloads travel inside AG-UI. See docs/backend-contract.md. */
 export const A2UI_CARRIER = "a2ui";
 export const SDUI_CARRIER = "sdui";
+/** `CUSTOM { name: "status", value: string | { label: string } }` : libellé d'état précis donné par le backend. */
+export const STATUS_CARRIER = "status";
+
+/** What the agent is doing right now, for a "working…" indicator. */
+export type ChatStatus =
+  | { phase: "sending" }
+  | { phase: "thinking" }
+  | { phase: "tool"; tool: Extract<ChatItem, { kind: "tool" }> }
+  | { phase: "writing" }
+  | { phase: "custom"; label: string };
 
 export type ChatItem =
   | { kind: "text"; id: string; role: "user" | "assistant"; text: string; streaming: boolean }
   | { kind: "ui"; id: string; host: HTMLElement }
-  | { kind: "tool"; id: string; name: string; done: boolean }
+  | { kind: "tool"; id: string; name: string; done: boolean; args?: Record<string, unknown> }
   | { kind: "error"; id: string; message: string };
 
 export type ChatSessionOptions = {
@@ -55,7 +65,12 @@ export class ChatSession {
   readonly threadId: string;
   items: ChatItem[] = [];
   running = false;
+  /** Start of the current run (ms epoch), for an elapsed-time display. */
+  runStartedAt = 0;
 
+  private serverStatus?: string;
+  private gotEvent = false;
+  private toolArgs = new Map<string, string>();
   private history: AgUiMessage[] = [];
   private renderer: A2uiRenderer;
   private pendingErrors: A2uiClientError[] = [];
@@ -71,6 +86,16 @@ export class ChatSession {
       onWarning: (w) => options.onWarning?.(w),
       styleTarget: options.styleTarget,
     });
+  }
+
+  /** Current state of the running agent, or null when idle. */
+  get status(): ChatStatus | null {
+    if (!this.running) return null;
+    const tool = [...this.toolItems.values()].reverse().find((t) => !t.done);
+    if (tool) return { phase: "tool", tool };
+    if (this.serverStatus) return { phase: "custom", label: this.serverStatus };
+    if ([...this.textItems.values()].some((t) => t.streaming)) return { phase: "writing" };
+    return this.gotEvent ? { phase: "thinking" } : { phase: "sending" };
   }
 
   /** Sends a user message and runs the agent. */
@@ -99,7 +124,11 @@ export class ChatSession {
 
   /** Applies one AG-UI event (public so a custom transport loop can feed it). */
   apply(event: AgUiEvent): void {
+    this.gotEvent = true;
     switch (event.type) {
+      case "RUN_STARTED":
+      case "STEP_STARTED":
+        break; // the run is alive: the status moves from "sending" to "thinking"
       case "TEXT_MESSAGE_START":
         this.startText(String(event.messageId));
         break;
@@ -116,9 +145,25 @@ export class ChatSession {
         break;
       }
       case "TOOL_CALL_START": {
+        this.serverStatus = undefined;
         const item = { kind: "tool" as const, id: String(event.toolCallId), name: String(event.toolCallName), done: false };
         this.toolItems.set(item.id, item);
         this.push(item);
+        break;
+      }
+      case "TOOL_CALL_ARGS": {
+        const id = String(event.toolCallId);
+        const raw = (this.toolArgs.get(id) ?? "") + String(event.delta ?? "");
+        this.toolArgs.set(id, raw);
+        const item = this.toolItems.get(id);
+        if (item) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") item.args = parsed as Record<string, unknown>;
+          } catch {
+            /* arguments still streaming */
+          }
+        }
         break;
       }
       case "TOOL_CALL_END": {
@@ -127,7 +172,11 @@ export class ChatSession {
         break;
       }
       case "CUSTOM":
-        if (event.name === A2UI_CARRIER) this.handleA2ui(event.value);
+        if (event.name === STATUS_CARRIER) {
+          const v = event.value as string | { label?: unknown } | undefined;
+          const label = typeof v === "string" ? v : typeof v?.label === "string" ? v.label : "";
+          this.serverStatus = label || undefined;
+        } else if (event.name === A2UI_CARRIER) this.handleA2ui(event.value);
         else if (event.name === SDUI_CARRIER) this.handleSdui(event.value as SDUIDescriptor);
         else {
           this.options.onCustom?.(String(event.name), event.value);
@@ -158,6 +207,9 @@ export class ChatSession {
       return;
     }
     this.running = true;
+    this.gotEvent = false;
+    this.serverStatus = undefined;
+    this.runStartedAt = Date.now();
     this.abort = new AbortController();
     const forwardedProps: Record<string, unknown> = {
       ...this.options.forwardedProps?.(),
@@ -224,6 +276,7 @@ export class ChatSession {
   }
 
   private startText(id: string) {
+    this.serverStatus = undefined;
     const item = { kind: "text" as const, id, role: "assistant" as const, text: "", streaming: true };
     this.textItems.set(id, item);
     this.push(item);

@@ -58,7 +58,10 @@ data: {"type":"RUN_FINISHED","threadId":"…","runId":"…"}
 Événements pris en compte :
 
 - `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END` et `TEXT_MESSAGE_CHUNK`. Le texte est toujours affiché en texte brut.
-- `TOOL_CALL_START` et `TOOL_CALL_END`, qui affichent une ligne d'état discrète.
+- `TOOL_CALL_START`, `TOOL_CALL_ARGS` et `TOOL_CALL_END` : une ligne par outil (spinner puis ✓). Le libellé vient de la propriété `toolLabels` de `sonic-chat` (texte ou fonction `(args, done) => string` ; les arguments sont connus dès que `TOOL_CALL_ARGS` est complet) ; défaut : le nom de l'outil.
+- `CUSTOM { name: "status", value: "Texte" | { label } }` : libellé d'état précis (« Étape 2 sur 3… »), affiché tant qu'aucun outil n'est en cours ni texte en train d'être écrit.
+
+Pendant un run, `sonic-chat` affiche en bas du journal une ligne d'état avec spinner : « Envoi… » (avant le premier événement), « Réflexion… », l'outil en cours, « Rédaction de la réponse… », et le temps écoulé au-delà de 3 s.
 - `RUN_ERROR`, qui affiche un message d'erreur. Un `code` éventuel (ex. `AGENT_NOT_CONFIGURED`) est transmis à l'application par l'événement DOM `chat-run-error` (`detail: {message, code}`).
 - Les blocs d'interface décrits ci-dessous.
 

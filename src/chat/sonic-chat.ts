@@ -3,8 +3,11 @@ import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { injectAgentStackStyles } from "../libraries/styles";
-import { ChatSession, type ChatItem } from "./session";
+import { ChatSession, type ChatItem, type ChatStatus } from "./session";
 import { HttpAgUiTransport, type AgentTransport } from "./transport";
+
+/** Libellé d'un outil : texte fixe, ou fonction (arguments connus une fois l'appel complet, fait ?). */
+export type ToolLabel = string | ((args: Record<string, unknown> | undefined, done: boolean) => string);
 
 const chatCss = `
 :where(sonic-chat) { display: flex; flex-direction: column; gap: var(--a2ui-gap, 0.75rem); min-height: 0; }
@@ -14,6 +17,15 @@ const chatCss = `
 :where(sonic-chat [data-chat-msg="assistant"]) { align-self: flex-start; }
 :where(sonic-chat [data-chat-tool], sonic-chat [data-chat-error]) { font-size: 0.85em; opacity: 0.8; }
 :where(sonic-chat [data-chat-error]) { color: var(--sc-danger, #b42318); }
+:where(sonic-chat [data-chat-tool], sonic-chat [data-chat-status]) { display: flex; align-items: center; gap: 0.5rem; }
+:where(sonic-chat [data-chat-status]) { font-size: 0.9em; opacity: 0.85; align-self: flex-start; padding: 0.25rem 0.5rem; }
+:where(sonic-chat [data-chat-status] [data-chat-elapsed]) { opacity: 0.6; font-variant-numeric: tabular-nums; }
+:where(sonic-chat [data-chat-spinner]) { flex: none; width: 0.9em; height: 0.9em; border-radius: 50%; animation: sonic-chat-spin 0.8s linear infinite; }
+/* Pas de :where() ici : doit l'emporter sur un reset « * { border-width: 0 } » (Tailwind preflight). */
+sonic-chat [data-chat-spinner] { box-sizing: border-box; border: 2px solid currentColor; border-right-color: transparent; }
+:where(sonic-chat [data-chat-tool-done]) { flex: none; width: 0.9em; text-align: center; color: var(--sc-success, currentColor); }
+@keyframes sonic-chat-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { :where(sonic-chat [data-chat-spinner]) { animation-duration: 3s; } }
 :where(sonic-chat form) { display: flex; gap: 0.5rem; align-items: flex-end; }
 :where(sonic-chat textarea) { flex: 1; resize: vertical; min-height: 2.5rem; font: inherit; padding: 0.5rem; border-radius: var(--sc-rounded, 0.5rem); border: 1px solid var(--sc-base-300, #ccc); }
 `;
@@ -38,6 +50,7 @@ export class SonicChat extends LitElement {
     transport: { attribute: false },
     headers: { attribute: false },
     forwardedProps: { attribute: false },
+    toolLabels: { attribute: false },
   };
 
   endpoint = "";
@@ -45,6 +58,8 @@ export class SonicChat extends LitElement {
   transport?: AgentTransport;
   headers?: Record<string, string>;
   forwardedProps?: Record<string, unknown>;
+  /** Libellés lisibles des outils, par nom (« Recherche d'icônes »…). Défaut : le nom de l'outil. */
+  toolLabels?: Record<string, ToolLabel>;
 
   session?: ChatSession;
   private draft = "";
@@ -63,9 +78,20 @@ export class SonicChat extends LitElement {
   }
 
   private styleRoot: Document | ShadowRoot = document;
+  private ticker?: ReturnType<typeof setInterval>;
+
+  /** Redessine chaque seconde pendant un run (temps écoulé). */
+  private syncTicker(running: boolean) {
+    if (running && !this.ticker) this.ticker = setInterval(() => this.requestUpdate(), 1000);
+    else if (!running && this.ticker) {
+      clearInterval(this.ticker);
+      this.ticker = undefined;
+    }
+  }
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this.syncTicker(false);
     this.session?.destroy();
     this.session = undefined;
   }
@@ -98,6 +124,7 @@ export class SonicChat extends LitElement {
   }
 
   protected updated() {
+    this.syncTicker(!!this.session?.running);
     const log = this.querySelector("[data-chat-log]");
     if (log) log.scrollTop = log.scrollHeight;
   }
@@ -108,6 +135,7 @@ export class SonicChat extends LitElement {
     return html`
       <div data-chat-log role="log" aria-live="polite">
         ${repeat(session.items, (i) => i.id, (i) => this.renderItem(i))}
+        ${this.renderStatus(session.status, session.runStartedAt)}
       </div>
       <form @submit=${this.onSubmit}>
         <textarea
@@ -131,13 +159,47 @@ export class SonicChat extends LitElement {
         return html`<div data-chat-msg=${item.role} ?data-streaming=${item.streaming}>${item.text}</div>`;
       case "ui":
         return html`<div data-chat-block>${item.host}</div>`;
-      case "tool":
-        return html`<div data-chat-tool>${item.done ? "✓" : "…"} ${item.name}</div>`;
+      case "tool": {
+        // Un outil en cours est déjà montré par la ligne d'état (une seule animation).
+        const status = this.session?.status;
+        if (!item.done && status?.phase === "tool" && status.tool === item) return nothing;
+        return html`<div data-chat-tool>
+          ${item.done ? html`<span data-chat-tool-done aria-hidden="true">✓</span>` : html`<span data-chat-spinner aria-hidden="true"></span>`}
+          <span>${this.toolLabel(item)}</span>
+        </div>`;
+      }
       case "error":
         return html`<div data-chat-error role="alert">${item.message}</div>`;
       default:
         return nothing;
     }
+  }
+
+  private toolLabel(item: Extract<ChatItem, { kind: "tool" }>): string {
+    const label = this.toolLabels?.[item.name];
+    if (typeof label === "function") return label(item.args, item.done);
+    return label ?? item.name;
+  }
+
+  /** « L'agent travaille » : un état précis (outil en cours, rédaction…) et le temps écoulé. */
+  private renderStatus(status: ChatStatus | null, startedAt: number) {
+    if (!status) return nothing;
+    const label =
+      status.phase === "sending"
+        ? "Envoi…"
+        : status.phase === "thinking"
+          ? "Réflexion…"
+          : status.phase === "writing"
+            ? "Rédaction de la réponse…"
+            : status.phase === "custom"
+              ? status.label
+              : `${this.toolLabel(status.tool)}…`;
+    const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    return html`<div data-chat-status data-phase=${status.phase} role="status">
+      <span data-chat-spinner aria-hidden="true"></span>
+      <span>${label}</span>
+      ${seconds >= 3 ? html`<span data-chat-elapsed>${seconds} s</span>` : nothing}
+    </div>`;
   }
 
   private onKeydown = (e: KeyboardEvent) => {
