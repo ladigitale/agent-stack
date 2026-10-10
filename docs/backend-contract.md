@@ -106,3 +106,12 @@ Les boutons portent une `action: { name, context }`, qui revient en `forwardedPr
 Tadaaa (`apps/api/src/Agent`, `POST /api/agent/run`) : boucle d'agent avec les outils MCP de Tadaaa exécutés dans le process, l'outil `render_ui` (composants A2UI validés côté serveur avec les règles des artefacts, puis émis en `CUSTOM a2ui`) et un client LLM (Messages API d'Anthropic). Sans Symfony AI ni Node.
 
 Pour essayer `sonic-chat` contre un backend réel : `yarn dev`, puis `http://localhost:5173/live.html?endpoint=<url>&token=<jeton>`.
+
+## Resuming a conversation
+
+`sonic-chat` takes `threadId` (attribute `thread-id`) and `restoreEntries`. A backend that keeps a compact log of past conversations returns it as `ChatLogEntry[]`:
+
+- `{ role: "user" | "assistant", text, id? }` — one text message;
+- `{ event: <AG-UI event> }` — an event to replay (tool calls, `CUSTOM a2ui` / `sdui`, `RUN_ERROR`).
+
+`ChatSession.restore(entries)` displays them and rebuilds the text history exactly as live events would, so the next `send` goes out on the same `threadId` with the full history. Changing `threadId` or `restoreEntries` starts a fresh session. Tool arguments need not be logged.
