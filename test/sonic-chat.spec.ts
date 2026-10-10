@@ -116,3 +116,39 @@ it("shows a thinking state between events", async () => {
   expect(el.querySelector("[data-chat-status]")?.getAttribute("data-phase")).toBe("thinking");
   await sent;
 });
+
+it("restores a past conversation and carries on in the same thread, with the text history", async () => {
+  const inputs: any[] = [];
+  const el = document.createElement("sonic-chat");
+  el.threadId = "thread-42";
+  el.restoreEntries = [
+    { role: "user", text: "Fais un quiz" },
+    { role: "assistant", id: "m1", text: "Voilà." },
+    { event: { type: "TOOL_CALL_START", toolCallId: "c1", toolCallName: "preview_artifact" } },
+  ];
+  el.transport = {
+    async *run(input: any) {
+      inputs.push(input);
+      yield { type: "RUN_FINISHED" };
+    },
+  } as any;
+  document.body.appendChild(el);
+  await el.updateComplete;
+  expect(el.session!.threadId).toBe("thread-42");
+  expect(el.session!.items.map((i) => i.kind)).toEqual(["text", "text", "tool"]);
+  expect((el.session!.items[2] as any).done).toBe(true);
+  expect(el.session!.status).toBeNull();
+  await el.send("Plus dur");
+  expect(inputs[0].threadId).toBe("thread-42");
+  expect(inputs[0].messages.map((m: any) => [m.role, m.content])).toEqual([
+    ["user", "Fais un quiz"],
+    ["assistant", "Voilà."],
+    ["user", "Plus dur"],
+  ]);
+  // Another thread: a fresh session.
+  el.threadId = "other";
+  el.restoreEntries = undefined;
+  await el.updateComplete;
+  expect(el.session!.threadId).toBe("other");
+  expect(el.session!.items).toEqual([]);
+});

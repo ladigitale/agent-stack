@@ -3,7 +3,7 @@ import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { injectAgentStackStyles } from "../libraries/styles";
-import { ChatSession, type ChatItem, type ChatStatus } from "./session";
+import { ChatSession, type ChatItem, type ChatLogEntry, type ChatStatus } from "./session";
 import { HttpAgUiTransport, type AgentTransport } from "./transport";
 
 /** Libellé d'un outil : texte fixe, ou fonction (arguments connus une fois l'appel complet, fait ?). */
@@ -51,6 +51,8 @@ export class SonicChat extends LitElement {
     headers: { attribute: false },
     forwardedProps: { attribute: false },
     toolLabels: { attribute: false },
+    threadId: { type: String, attribute: "thread-id" },
+    restoreEntries: { attribute: false },
   };
 
   endpoint = "";
@@ -60,6 +62,11 @@ export class SonicChat extends LitElement {
   forwardedProps?: Record<string, unknown>;
   /** Libellés lisibles des outils, par nom (« Recherche d'icônes »…). Défaut : le nom de l'outil. */
   toolLabels?: Record<string, ToolLabel>;
+
+  /** Conversation id; changing it starts (or resumes) another thread. Default: a random one. */
+  threadId?: string;
+  /** Log of a past conversation to show and carry on (see `ChatSession.restore`). Set it with `threadId`. */
+  restoreEntries?: ChatLogEntry[];
 
   session?: ChatSession;
   private draft = "";
@@ -98,7 +105,13 @@ export class SonicChat extends LitElement {
 
   protected willUpdate(changed: PropertyValues) {
     // Headers and forwardedProps are read at run time: changing them keeps the conversation.
-    if (!this.session || changed.has("transport") || changed.has("endpoint")) {
+    if (
+      !this.session ||
+      changed.has("transport") ||
+      changed.has("endpoint") ||
+      changed.has("threadId") ||
+      changed.has("restoreEntries")
+    ) {
       const transport =
         this.transport ??
         (this.endpoint ? new HttpAgUiTransport({ url: this.endpoint, headers: () => this.headers }) : undefined);
@@ -106,15 +119,18 @@ export class SonicChat extends LitElement {
       this.session?.destroy();
       this.session = new ChatSession({
         transport,
+        threadId: this.threadId,
         styleTarget: this.styleRoot,
         forwardedProps: () => this.forwardedProps ?? {},
         onChange: () => this.requestUpdate(),
         onWarning: (w) => console.warn(`sonic-chat: ${w}`),
         onCustom: (name, value) =>
           this.dispatchEvent(new CustomEvent("chat-custom", { detail: { name, value }, bubbles: true, composed: true })),
+        onRunEnd: () => this.dispatchEvent(new CustomEvent("chat-run-end", { bubbles: true, composed: true })),
         onRunError: (error) =>
           this.dispatchEvent(new CustomEvent("chat-run-error", { detail: error, bubbles: true, composed: true })),
       });
+      if (this.restoreEntries?.length) this.session.restore(this.restoreEntries);
     }
   }
 

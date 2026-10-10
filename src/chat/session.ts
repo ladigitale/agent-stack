@@ -27,6 +27,14 @@ export type ChatItem =
   | { kind: "tool"; id: string; name: string; done: boolean; args?: Record<string, unknown> }
   | { kind: "error"; id: string; message: string };
 
+/**
+ * Compact log of a past conversation, to display it again and carry on (`ChatSession.restore`):
+ * a user/assistant text, or an AG-UI event to replay (tool calls, UI blocks, errors).
+ */
+export type ChatLogEntry =
+  | { role: "user" | "assistant"; text: string; id?: string }
+  | { event: AgUiEvent };
+
 export type ChatSessionOptions = {
   transport: AgentTransport;
   threadId?: string;
@@ -42,6 +50,8 @@ export type ChatSessionOptions = {
   onCustom?: (name: string, value: unknown) => void;
   /** `RUN_ERROR` (and transport failures), with the backend's `code` when it sends one. */
   onRunError?: (error: { message: string; code?: string }) => void;
+  /** A run is over (finished, failed or stopped). */
+  onRunEnd?: () => void;
 };
 
 const uid = () =>
@@ -96,6 +106,31 @@ export class ChatSession {
     if (this.serverStatus) return { phase: "custom", label: this.serverStatus };
     if ([...this.textItems.values()].some((t) => t.streaming)) return { phase: "writing" };
     return this.gotEvent ? { phase: "thinking" } : { phase: "sending" };
+  }
+
+  /**
+   * Rebuilds a past conversation from a log, without running the agent: items are displayed
+   * and the text history is rebuilt exactly as live events would have built it, so the next
+   * `send` continues the same thread. Call it on a fresh session, before any `send`.
+   */
+  restore(entries: ChatLogEntry[]): void {
+    for (const entry of entries) {
+      if ("event" in entry) {
+        if (entry.event && typeof entry.event === "object") this.apply(entry.event);
+      } else if (typeof entry.text === "string" && entry.text.trim()) {
+        const id = entry.id || uid();
+        if (entry.role === "user") {
+          this.history.push({ id, role: "user", content: entry.text });
+          this.push({ kind: "text", id, role: "user", text: entry.text, streaming: false });
+        } else {
+          this.history.push({ id, role: "assistant", content: entry.text });
+          this.push({ kind: "text", id, role: "assistant", text: entry.text, streaming: false });
+        }
+      }
+    }
+    for (const tool of this.toolItems.values()) tool.done = true; // a log cut mid-call never "runs"
+    this.serverStatus = undefined;
+    this.changed();
   }
 
   /** Sends a user message and runs the agent. */
@@ -238,6 +273,7 @@ export class ChatSession {
       this.running = false;
       this.abort = undefined;
       this.changed();
+      this.options.onRunEnd?.();
     }
   }
 
