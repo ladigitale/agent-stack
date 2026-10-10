@@ -126,6 +126,7 @@ export class SonicChat extends LitElement {
         onWarning: (w) => console.warn(`sonic-chat: ${w}`),
         onCustom: (name, value) =>
           this.dispatchEvent(new CustomEvent("chat-custom", { detail: { name, value }, bubbles: true, composed: true })),
+        onRunEnd: () => this.dispatchEvent(new CustomEvent("chat-run-end", { bubbles: true, composed: true })),
         onRunError: (error) =>
           this.dispatchEvent(new CustomEvent("chat-run-error", { detail: error, bubbles: true, composed: true })),
       });

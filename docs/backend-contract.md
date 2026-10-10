@@ -115,3 +115,5 @@ Pour essayer `sonic-chat` contre un backend réel : `yarn dev`, puis `http://loc
 - `{ event: <AG-UI event> }` — an event to replay (tool calls, `CUSTOM a2ui` / `sdui`, `RUN_ERROR`).
 
 `ChatSession.restore(entries)` displays them and rebuilds the text history exactly as live events would, so the next `send` goes out on the same `threadId` with the full history. Changing `threadId` or `restoreEntries` starts a fresh session. Tool arguments need not be logged.
+
+`sonic-chat` also fires `chat-run-end` when a run is over (to refresh a conversation list, for instance).

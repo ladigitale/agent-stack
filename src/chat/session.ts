@@ -50,6 +50,8 @@ export type ChatSessionOptions = {
   onCustom?: (name: string, value: unknown) => void;
   /** `RUN_ERROR` (and transport failures), with the backend's `code` when it sends one. */
   onRunError?: (error: { message: string; code?: string }) => void;
+  /** A run is over (finished, failed or stopped). */
+  onRunEnd?: () => void;
 };
 
 const uid = () =>
@@ -271,6 +273,7 @@ export class ChatSession {
       this.running = false;
       this.abort = undefined;
       this.changed();
+      this.options.onRunEnd?.();
     }
   }
 
