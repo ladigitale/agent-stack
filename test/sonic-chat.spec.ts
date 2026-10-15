@@ -116,3 +116,88 @@ it("shows a thinking state between events", async () => {
   expect(el.querySelector("[data-chat-status]")?.getAttribute("data-phase")).toBe("thinking");
   await sent;
 });
+
+function mount(transport: ConstructorParameters<typeof Object>[0] = undefined) {
+  const el = document.createElement("sonic-chat");
+  el.transport = transport as never;
+  document.body.appendChild(el);
+  return el;
+}
+const type = (el: HTMLElement, text: string) => {
+  const ta = el.querySelector("textarea")!;
+  ta.value = text;
+  ta.dispatchEvent(new Event("input"));
+  return ta;
+};
+const enter = (ta: HTMLElement, init: KeyboardEventInit = {}) => {
+  const e = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init });
+  ta.dispatchEvent(e);
+  return e;
+};
+
+it("shows an empty state, a focusable labelled log and a disabled send button", async () => {
+  const el = mount(new ReplayTransport(() => []));
+  el.emptyText = "Posez une question";
+  await el.updateComplete;
+  expect(el.querySelector("[data-chat-empty]")?.textContent).toBe("Posez une question");
+  const log = el.querySelector("[data-chat-log]")!;
+  expect(log.getAttribute("tabindex")).toBe("0");
+  expect(log.getAttribute("aria-label")).toBe("Conversation");
+  expect(el.querySelector("form sonic-button")?.hasAttribute("disabled")).toBe(true);
+  type(el, "salut");
+  await el.updateComplete;
+  expect(el.querySelector("form sonic-button")?.hasAttribute("disabled")).toBe(false);
+});
+
+it("Enter sends, Shift+Enter and IME composition do not, blank drafts are ignored", async () => {
+  let runs = 0;
+  const el = mount(new ReplayTransport(() => (runs++, [])));
+  await el.updateComplete;
+  const ta = type(el, "   ");
+  expect(enter(ta).defaultPrevented).toBe(true);
+  await tick();
+  expect(runs).toBe(0);
+  type(el, "bonjour");
+  enter(ta, { shiftKey: true });
+  enter(ta, { isComposing: true });
+  await tick();
+  expect(runs).toBe(0);
+  enter(ta);
+  await tick();
+  expect(runs).toBe(1);
+});
+
+it("offers a retry after a failed run and replays it", async () => {
+  let n = 0;
+  const el = mount(
+    new ReplayTransport(() => (n++ === 0 ? [{ type: "RUN_ERROR", message: "boom" }] : [{ type: "RUN_FINISHED" }]))
+  );
+  await el.updateComplete;
+  await el.send("hello");
+  await el.updateComplete;
+  const err = el.querySelector("[data-chat-error]")!;
+  expect(err.getAttribute("role")).toBe("alert");
+  const retry = [...err.querySelectorAll("sonic-button")].find((b) => b.textContent?.includes("Réessayer"))!;
+  (retry as HTMLElement).click();
+  await tick();
+  await el.updateComplete;
+  expect(n).toBe(2);
+});
+
+it("flags data-running on the element while a run is in progress", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const el = mount({
+    async *run() {
+      await gate;
+    },
+  });
+  await el.updateComplete;
+  const p = el.send("go");
+  await el.updateComplete;
+  expect(el.hasAttribute("data-running")).toBe(true);
+  release();
+  await p;
+  await el.updateComplete;
+  expect(el.hasAttribute("data-running")).toBe(false);
+});

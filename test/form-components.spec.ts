@@ -54,7 +54,10 @@ it("ChoicePicker writes a string list, single or multiple", async () => {
   await tick(3);
   const radios = [...container.querySelectorAll('[data-sdui-node-id="single"] sonic-radio')] as (HTMLElement & { checked: unknown })[];
   expect(radios.map((r) => r.checked)).toEqual([null, true]);
-  expect(container.querySelector('[data-sdui-node-id="single"] [data-a2ui-label]')?.textContent).toBe("Taille");
+  // The label now lives on a sonic-fieldset (legend + native group semantics).
+  const group = container.querySelector('[data-sdui-node-id="single"]')!;
+  expect(group.tagName).toBe("SONIC-FIELDSET");
+  expect(group.getAttribute("label")).toBe("Taille");
   PublisherManager.get("a2ui_f__single").v.set("a");
   await tick();
   expect(model().one).toEqual(["a"]);
@@ -121,4 +124,60 @@ it("Modal opens its content from the trigger", async () => {
   dialog.showModal = () => (opened = true);
   q('[data-sdui-node-id="open"]')!.click();
   expect(opened).toBe(true);
+});
+
+it("Tabs support arrow keys, Home/End, roving tabindex and ARIA wiring", async () => {
+  const { components, q } = setup();
+  components([
+    { id: "root", component: "Tabs", tabs: [{ title: "Un", child: "a" }, { title: "Deux", child: "b" }, { title: "Trois", child: "c" }] },
+    { id: "a", component: "Text", text: "A" },
+    { id: "b", component: "Text", text: "B" },
+    { id: "c", component: "Text", text: "C" },
+  ]);
+  await tick();
+  const tabs = q('[data-sdui-node-id="root"]')!;
+  const root = tabs.shadowRoot!;
+  const btns = () => [...root.querySelectorAll<HTMLButtonElement>("button")];
+  expect(btns().map((b) => b.tabIndex)).toEqual([0, -1, -1]);
+  const panel = root.querySelector("[role=tabpanel]")!;
+  expect(btns()[0].getAttribute("aria-controls")).toBe(panel.id);
+  expect(panel.getAttribute("aria-labelledby")).toBe(btns()[0].id);
+  const key = (k: string) => root.querySelector("[role=tablist]")!.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }));
+  key("ArrowRight");
+  expect(btns().map((b) => b.getAttribute("aria-selected"))).toEqual(["false", "true", "false"]);
+  expect(btns()[1].tabIndex).toBe(0);
+  key("End");
+  expect(btns()[2].getAttribute("aria-selected")).toBe("true");
+  key("ArrowRight"); // wraps
+  expect(btns()[0].getAttribute("aria-selected")).toBe("true");
+  key("ArrowLeft"); // wraps back
+  expect(btns()[2].getAttribute("aria-selected")).toBe("true");
+  key("Home");
+  expect(btns()[0].getAttribute("aria-selected")).toBe("true");
+  expect(root.querySelector("slot")!.name).toBe("tab-0");
+});
+
+it("Modal close control is a labelled icon button and the backdrop closes it", async () => {
+  const { components, q } = setup();
+  components([
+    { id: "root", component: "Modal", trigger: "open", content: "body" },
+    { id: "open", component: "Button", child: "open-l", action: { event: { name: "noop" } } },
+    { id: "open-l", component: "Text", text: "Détails" },
+    { id: "body", component: "Text", text: "Le détail" },
+  ]);
+  await tick();
+  const modal = q('[data-sdui-node-id="root"]')!;
+  const dialog = modal.shadowRoot!.querySelector("dialog")! as HTMLDialogElement;
+  const close = modal.shadowRoot!.querySelector<HTMLButtonElement>(".close")!;
+  expect(close.getAttribute("aria-label")).toBe("Fermer");
+  expect(close.textContent).toBe("");
+  expect(close.querySelector("svg")).not.toBeNull();
+  modal.setAttribute("close-label", "Close");
+  expect(close.getAttribute("aria-label")).toBe("Close");
+  let closed = 0;
+  dialog.close = () => void closed++;
+  dialog.dispatchEvent(new MouseEvent("click", { bubbles: true })); // target = dialog (backdrop)
+  expect(closed).toBe(1);
+  close.click();
+  expect(closed).toBe(2);
 });

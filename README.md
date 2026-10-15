@@ -17,6 +17,8 @@ Le dépôt ne s'appuie que sur les [points d'extension publics de Concorde 5.1](
 | `/chat` | `sonic-chat`, session et transports AG-UI (HTTP SSE, rejeu) | phase 1 |
 | `/catalog` | Export du catalogue Concorde vers A2UI et schéma d'outil `render_ui` | à faire |
 
+Les recommandations UI/UX à donner aux agents sont dans [`docs/ui-guidelines.md`](docs/ui-guidelines.md).
+
 Le contrat attendu du backend PHP est décrit dans [`docs/backend-contract.md`](docs/backend-contract.md).
 
 ## Démo
@@ -81,7 +83,8 @@ Chaque surface A2UI devient un `<sonic-sdui profile="safe" partial>`. Son data m
 | `action.event` | `action` sur le nœud, puis `sdui-action`, puis message `action` A2UI avec un `context` résolu |
 | `Text` lié à un chemin | `<a2ui-text>`, toujours en texte brut |
 | `TextField` lié à un chemin | `sonic-input` / `sonic-textarea` + `formDataProvider` + `name` |
-| `CheckBox`, `ChoicePicker` (exclusif), `Slider` | champ Concorde (`sonic-checkbox`, `sonic-radio`, `sonic-input type=range`) sur un provider de travail, et `<a2ui-bridge>` qui convertit (booléen, liste d'une valeur, nombre) |
+| `CheckBox`, `ChoicePicker` (exclusif), `Slider` | champ Concorde (`sonic-checkbox` / `sonic-switch`, `sonic-radio` ou `sonic-button` en chips, `sonic-input type=range`) sur un provider de travail, et `<a2ui-bridge>` qui convertit (booléen, liste d'une valeur, nombre) |
+| `ChoicePicker` (tous) | `sonic-fieldset` qui porte le label et la description ; les options sont dans un `div[data-a2ui-choices]` |
 | `ChoicePicker` (`multipleSelection`) | `sonic-checkbox` liés directement (tableau de valeurs) |
 | `DateTimeInput` | `sonic-input` `date` / `time` / `datetime-local` |
 | `Tabs`, `Modal` | `<a2ui-tabs>` / `<a2ui-modal>` : les enfants restent gérés par `sonic-sdui`, l'élément les répartit dans les slots de son shadow DOM |
@@ -93,7 +96,27 @@ Supportés : `Row`, `Column`, `List` (enfants statiques ou gabarit), `Text`, `Ca
 
 Pas encore supportés, avec une erreur `UNSUPPORTED_COMPONENT` renvoyée à l'agent : `Video`, `AudioPlayer`, les `checks` (ignorés, avec un avertissement), les fonctions (`formatString`…) et les liaisons sur les props autres que du texte.
 
-Les libellés passés à des attributs que Concorde rend en HTML (`label`) sont échappés : ils s'affichent toujours en texte.
+Les libellés passés à des attributs que Concorde rend en HTML (`label`, `description`) sont échappés : ils s'affichent toujours en texte.
+
+### Props étendues (Concorde)
+
+Le catalogue de base A2UI ne connaît que quelques props par composant. L'adaptateur accepte en plus ces props **optionnelles**, qui reprennent les noms des attributs Concorde. Un agent qui ne les connaît pas obtient le rendu de base ; une valeur hors liste est ignorée avec un avertissement (`onWarning`). Ce sont des littéraux : une liaison `{"path": …}` sur ces props renvoie une erreur à l'agent, comme ailleurs.
+
+| Composant | Props | Rendu Concorde |
+| --- | --- | --- |
+| `Button` | `variant` : `primary`, `borderless` (A2UI) ou `outline`, `ghost`, `link` | `sonic-button` `type` / `variant` |
+| `Button` | `type` : `primary`, `neutral`, `warning`, `danger`, `success`, `info` ; `size` : `2xs`…`2xl` ; `shape` : `circle`, `square`, `block` | attributs du même nom ; `type` l'emporte sur `variant: "primary"` |
+| `Button` | `loading`, `disabled`, `active` (état sélectionné) | attributs booléens du même nom |
+| `TextField`, `Slider`, `DateTimeInput` | `description`, `placeholder`, `size`, `status` (`success`, `error`, `warning`, `info`), `required`, `readonly`, `disabled` | attributs du même nom (`description` échappée) |
+| `CheckBox` | `description`, `disabled`, `variant: "switch"` | `sonic-checkbox` ou `sonic-switch` |
+| `ChoicePicker` | `description`, `disabled`, `size` ; `displayStyle: "chips"` | `sonic-fieldset` (label, description, groupe natif) ; chips = `sonic-button` cochables (`radio` si exclusif) |
+| `Column` | `layout: "form"` | `sonic-form-layout` (grille 2 colonnes responsive) |
+| `Row` | `layout: "actions"` (+ `justify`, `align`) | `sonic-form-actions` |
+| `Row` | `layout: "group"` (+ `label`, `description`, `align`) | `sonic-group` |
+
+`layout` est explicite, pas déduit du contenu : en streaming, les enfants d'une `Column` arrivent après elle, et un type de conteneur qui changerait en cours de route ferait clignoter la surface.
+
+Le focus (clic, clavier) est géré par le navigateur et par les styles de Concorde : il n'est pas pilotable par l'agent. Pour l'adapter, surchargez les jetons `--sc-*`.
 
 Tout problème est signalé, à l'agent sous forme d'erreur A2UI ou à l'application via `onWarning`. Rien n'échoue en silence.
 

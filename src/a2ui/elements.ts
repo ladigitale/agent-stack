@@ -151,12 +151,17 @@ abstract class SlottedChildren extends HTMLElement {
 const tabsCss = `
 :host { display: flex; flex-direction: column; gap: var(--a2ui-gap, 0.75rem); }
 [role=tablist] { display: flex; flex-wrap: wrap; gap: 0.25rem; border-bottom: 1px solid var(--sc-base-300, #ddd); }
-button { font: inherit; color: inherit; background: none; border: 0; border-bottom: 2px solid transparent; padding: 0.4rem 0.75rem; cursor: pointer; }
+button { font: inherit; color: inherit; background: none; border: 0; border-bottom: 2px solid transparent; padding: 0.5rem 0.75rem; min-height: 2.75rem; cursor: pointer; display: inline-grid; }
+/* Bold width reserved on a hidden twin so selecting a tab never shifts its siblings. */
+button::after { content: attr(data-label); font-weight: 600; height: 0; visibility: hidden; overflow: hidden; user-select: none; }
 button[aria-selected=true] { border-bottom-color: var(--sc-primary, currentColor); font-weight: 600; }
-button:focus-visible { outline: 2px solid var(--sc-primary, currentColor); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid var(--sc-primary, currentColor); outline-offset: -2px; }
+[role=tabpanel]:focus-visible { outline: 2px solid var(--sc-primary, currentColor); outline-offset: 2px; }
 `;
 
-/** `<a2ui-tabs titles='["A","B"]'>` — one child per tab, in order. */
+let tabsCount = 0;
+
+/** `<a2ui-tabs titles='["A","B"]'>` — one child per tab, in order. Arrow keys, Home and End move between tabs. */
 export class A2uiTabs extends SlottedChildren {
   static get observedAttributes() {
     return ["titles"];
@@ -164,17 +169,22 @@ export class A2uiTabs extends SlottedChildren {
   private selected = 0;
   private bar?: HTMLElement;
   private panel?: HTMLSlotElement;
+  private panelEl?: HTMLElement;
+  private uid = `a2ui-tabs-${++tabsCount}`;
 
   protected build(root: ShadowRoot) {
     const style = document.createElement("style");
     style.textContent = tabsCss;
     this.bar = document.createElement("div");
     this.bar.setAttribute("role", "tablist");
-    const panel = document.createElement("div");
-    panel.setAttribute("role", "tabpanel");
+    this.bar.addEventListener("keydown", (e) => this.onKey(e));
+    this.panelEl = document.createElement("div");
+    this.panelEl.setAttribute("role", "tabpanel");
+    this.panelEl.id = `${this.uid}-panel`;
+    this.panelEl.tabIndex = 0;
     this.panel = document.createElement("slot");
-    panel.appendChild(this.panel);
-    root.append(style, this.bar, panel);
+    this.panelEl.appendChild(this.panel);
+    root.append(style, this.bar, this.panelEl);
     this.renderBar();
   }
 
@@ -195,37 +205,81 @@ export class A2uiTabs extends SlottedChildren {
     }
   }
 
+  private select(i: number, focus = false) {
+    this.selected = i;
+    this.renderBar();
+    if (focus) (this.bar?.children[i] as HTMLElement | undefined)?.focus();
+  }
+
+  private onKey(e: KeyboardEvent) {
+    const n = this.titles().length;
+    if (!n) return;
+    const rtl = getComputedStyle(this).direction === "rtl";
+    let next: number | undefined;
+    if (e.key === "ArrowRight") next = this.selected + (rtl ? -1 : 1);
+    else if (e.key === "ArrowLeft") next = this.selected + (rtl ? 1 : -1);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = n - 1;
+    if (next === undefined) return;
+    e.preventDefault();
+    this.select((next + n) % n, true);
+  }
+
   private renderBar() {
-    if (!this.bar || !this.panel) return;
+    if (!this.bar || !this.panel || !this.panelEl) return;
     const titles = this.titles();
     if (this.selected >= titles.length) this.selected = 0;
     this.bar.replaceChildren(
       ...titles.map((title, i) => {
+        const on = i === this.selected;
         const b = document.createElement("button");
         b.type = "button";
+        b.id = `${this.uid}-tab-${i}`;
         b.setAttribute("role", "tab");
-        b.setAttribute("aria-selected", String(i === this.selected));
+        b.setAttribute("aria-selected", String(on));
+        b.setAttribute("aria-controls", this.panelEl!.id);
+        b.tabIndex = on ? 0 : -1; // roving tabindex: one tab stop, arrows inside
+        b.dataset.label = title;
         b.textContent = title; // plain text, never HTML
-        b.addEventListener("click", () => {
-          this.selected = i;
-          this.renderBar();
-        });
+        b.addEventListener("click", () => this.select(i));
         return b;
       })
     );
+    this.panelEl.setAttribute("aria-labelledby", `${this.uid}-tab-${this.selected}`);
     this.panel.name = this.slotFor(this.selected);
   }
 }
 
 const modalCss = `
-dialog { border: 0; border-radius: var(--sc-rounded, 0.75rem); padding: 1.25rem; max-width: min(36rem, 90vw); color: inherit; background: var(--sc-base, #fff); box-shadow: 0 10px 40px rgb(0 0 0 / 0.25); }
+dialog { border: 0; border-radius: var(--sc-rounded, 0.75rem); padding: 1.25rem; padding-block-start: 3rem; max-width: min(36rem, 90vw); max-height: 85vh; overflow: auto; overscroll-behavior: contain; color: inherit; background: var(--sc-base, #fff); box-shadow: 0 10px 40px rgb(0 0 0 / 0.25); }
 dialog::backdrop { background: rgb(0 0 0 / 0.4); }
-.close { position: absolute; top: 0.4rem; right: 0.5rem; font: inherit; font-size: 1.25rem; line-height: 1; background: none; border: 0; cursor: pointer; color: inherit; }
+.close { position: absolute; top: 0.25rem; inset-inline-end: 0.25rem; display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; padding: 0; background: none; border: 0; border-radius: 50%; cursor: pointer; color: inherit; }
+.close:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+.close:focus-visible { outline: 2px solid var(--sc-primary, currentColor); outline-offset: -2px; }
+.close svg { width: 1.25rem; height: 1.25rem; }
 `;
 
-/** `<a2ui-modal>` — first child opens the dialog, second child is its content. */
+const CLOSE_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+/**
+ * `<a2ui-modal close-label="Fermer">` — first child opens the dialog, second child is its content.
+ * Escape, the close button and a click on the backdrop all close it.
+ */
 export class A2uiModal extends SlottedChildren {
+  static get observedAttributes() {
+    return ["close-label"];
+  }
   private dialog?: HTMLDialogElement;
+  private closeBtn?: HTMLButtonElement;
+
+  attributeChangedCallback() {
+    this.syncLabel();
+  }
+
+  private syncLabel() {
+    this.closeBtn?.setAttribute("aria-label", this.getAttribute("close-label") || "Fermer");
+  }
 
   protected build(root: ShadowRoot) {
     const style = document.createElement("style");
@@ -234,15 +288,19 @@ export class A2uiModal extends SlottedChildren {
     trigger.name = "trigger";
     trigger.addEventListener("click", () => this.dialog?.showModal());
     this.dialog = document.createElement("dialog");
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "close";
-    close.setAttribute("aria-label", "Fermer");
-    close.textContent = "×";
-    close.addEventListener("click", () => this.dialog?.close());
+    this.closeBtn = document.createElement("button");
+    this.closeBtn.type = "button";
+    this.closeBtn.className = "close";
+    this.closeBtn.innerHTML = CLOSE_ICON; // constant, authored here
+    this.syncLabel();
+    this.closeBtn.addEventListener("click", () => this.dialog?.close());
+    // A click whose target is the <dialog> itself landed on the backdrop.
+    this.dialog.addEventListener("click", (e) => {
+      if (e.target === this.dialog) this.dialog?.close();
+    });
     const content = document.createElement("slot");
     content.name = "content";
-    this.dialog.append(close, content);
+    this.dialog.append(this.closeBtn, content);
     root.append(style, trigger, this.dialog);
   }
 

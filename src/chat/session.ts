@@ -21,6 +21,27 @@ export type ChatStatus =
   | { phase: "writing" }
   | { phase: "custom"; label: string };
 
+/** What happened during one run, to compare models on facts (see `ChatSession.lastRun`). */
+export type RunDiagnostics = {
+  runId: string;
+  /** ms from sending to the first event, or null when nothing came back. */
+  firstEventMs: number | null;
+  durationMs: number;
+  /** Count of AG-UI events by `type`. */
+  events: Record<string, number>;
+  /** Events the session does not use (unknown `type`). */
+  ignored: number;
+  /** A2UI errors sent back to the agent, by code. */
+  a2uiErrors: Record<string, number>;
+  /** Tool calls that never got a `TOOL_CALL_END`. */
+  unclosedTools: number;
+  /** Text messages that never got a `TEXT_MESSAGE_END`. */
+  unclosedTexts: number;
+  outcome: "finished" | "error" | "aborted" | "idle-timeout";
+};
+
+export const IDLE_TIMEOUT_CODE = "IDLE_TIMEOUT";
+
 export type ChatItem =
   | { kind: "text"; id: string; role: "user" | "assistant"; text: string; streaming: boolean }
   | { kind: "ui"; id: string; host: HTMLElement }
@@ -42,7 +63,41 @@ export type ChatSessionOptions = {
   onCustom?: (name: string, value: unknown) => void;
   /** `RUN_ERROR` (and transport failures), with the backend's `code` when it sends one. */
   onRunError?: (error: { message: string; code?: string }) => void;
+  /**
+   * Gives up on a run when no event arrives for this long (ms): the run is
+   * aborted and an error with `code: "IDLE_TIMEOUT"` is shown. 0 disables.
+   * Default: 60000.
+   */
+  idleTimeoutMs?: number;
+  /** Called at the end of every run with its diagnostics. */
+  onRunEnd?: (diagnostics: RunDiagnostics) => void;
+  /** Max A2UI messages kept per surface while waiting for `createSurface`. Default: 50. */
+  deferOrphans?: number;
 };
+
+const asText = (v: unknown): string =>
+  typeof v === "string" ? v : v == null ? "" : (() => { try { return JSON.stringify(v); } catch { return String(v); } })();
+
+class IdleError extends Error {
+  constructor(readonly ms: number) {
+    super("idle timeout");
+  }
+}
+
+function parseJsonMessages(text: string): unknown[] | undefined {
+  const trimmed = text.trim();
+  try {
+    const v = JSON.parse(trimmed);
+    return Array.isArray(v) ? v : [v];
+  } catch {
+    /* maybe JSONL */
+  }
+  try {
+    return trimmed.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+  } catch {
+    return undefined;
+  }
+}
 
 const uid = () =>
   globalThis.crypto?.randomUUID?.() ?? `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -71,10 +126,16 @@ export class ChatSession {
   private serverStatus?: string;
   private gotEvent = false;
   private toolArgs = new Map<string, string>();
+  /** Id de l'appel d'outil sur le fil → clé de l'item : un id réutilisé par un autre appel (« call_0 » à chaque étape) crée un nouvel item. */
+  private toolWire = new Map<string, string>();
   private history: AgUiMessage[] = [];
   private renderer: A2uiRenderer;
   private pendingErrors: A2uiClientError[] = [];
+  private lastForwarded?: Record<string, unknown>;
   private abort?: AbortController;
+  private diag?: RunDiagnostics;
+  /** Diagnostics of the last finished run. */
+  lastRun?: RunDiagnostics;
   private textItems = new Map<string, Extract<ChatItem, { kind: "text" }>>();
   private toolItems = new Map<string, Extract<ChatItem, { kind: "tool" }>>();
 
@@ -85,6 +146,7 @@ export class ChatSession {
       onClientMessage: (msg) => this.onA2uiClientMessage(msg),
       onWarning: (w) => options.onWarning?.(w),
       styleTarget: options.styleTarget,
+      deferOrphans: options.deferOrphans ?? 50,
     });
   }
 
@@ -113,6 +175,11 @@ export class ChatSession {
     return this.run(forwarded);
   }
 
+  /** Replays the last run (same history, same action) after a failure. */
+  retry(): Promise<void> {
+    return this.run(this.lastForwarded);
+  }
+
   stop(): void {
     this.abort?.abort();
   }
@@ -125,9 +192,16 @@ export class ChatSession {
   /** Applies one AG-UI event (public so a custom transport loop can feed it). */
   apply(event: AgUiEvent): void {
     this.gotEvent = true;
+    if (this.diag) {
+      this.diag.firstEventMs ??= Date.now() - this.runStartedAt;
+      this.diag.events[event.type] = (this.diag.events[event.type] ?? 0) + 1;
+    }
     switch (event.type) {
       case "RUN_STARTED":
       case "STEP_STARTED":
+      case "STEP_FINISHED":
+      case "RUN_FINISHED":
+      case "TOOL_CALL_RESULT":
         break; // the run is alive: the status moves from "sending" to "thinking"
       case "TEXT_MESSAGE_START":
         this.startText(String(event.messageId));
@@ -136,7 +210,7 @@ export class ChatSession {
       case "TEXT_MESSAGE_CHUNK": {
         const id = String(event.messageId ?? this.lastTextId() ?? uid());
         const item = this.textItems.get(id) ?? this.startText(id);
-        item.text += String(event.delta ?? "");
+        item.text += asText(event.delta);
         break;
       }
       case "TEXT_MESSAGE_END": {
@@ -144,30 +218,27 @@ export class ChatSession {
         if (item) this.commitText(item);
         break;
       }
-      case "TOOL_CALL_START": {
-        this.serverStatus = undefined;
-        const item = { kind: "tool" as const, id: String(event.toolCallId), name: String(event.toolCallName), done: false };
-        this.toolItems.set(item.id, item);
-        this.push(item);
+      case "TOOL_CALL_START":
+        this.startTool(String(event.toolCallId), String(event.toolCallName));
         break;
-      }
+      case "TOOL_CALL_CHUNK": // compact form: start + args in one event, the name only on the first
       case "TOOL_CALL_ARGS": {
-        const id = String(event.toolCallId);
-        const raw = (this.toolArgs.get(id) ?? "") + String(event.delta ?? "");
+        const e = event as { toolCallId?: unknown; toolCallName?: unknown; delta?: unknown };
+        const wire = String(e.toolCallId ?? [...this.toolWire.keys()].pop() ?? uid());
+        const item = this.toolFor(wire) ?? this.startTool(wire, String(e.toolCallName ?? "tool"));
+        const id = item.id;
+        const raw = (this.toolArgs.get(id) ?? "") + asText(e.delta);
         this.toolArgs.set(id, raw);
-        const item = this.toolItems.get(id);
-        if (item) {
-          try {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === "object") item.args = parsed as Record<string, unknown>;
-          } catch {
-            /* arguments still streaming */
-          }
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") item.args = parsed as Record<string, unknown>;
+        } catch {
+          /* arguments still streaming */
         }
         break;
       }
       case "TOOL_CALL_END": {
-        const item = this.toolItems.get(String(event.toolCallId));
+        const item = this.toolFor(String(event.toolCallId));
         if (item) item.done = true;
         break;
       }
@@ -189,6 +260,7 @@ export class ChatSession {
         }
         break;
       case "RUN_ERROR":
+        if (this.diag) this.diag.outcome = "error";
         this.push({ kind: "error", id: uid(), message: String(event.message) });
         this.options.onRunError?.({
           message: String(event.message),
@@ -196,6 +268,7 @@ export class ChatSession {
         });
         break;
       default:
+        if (this.diag) this.diag.ignored++;
         return; // ignored event: no change notification
     }
     this.changed();
@@ -207,6 +280,7 @@ export class ChatSession {
       return;
     }
     this.running = true;
+    this.lastForwarded = forwarded;
     this.gotEvent = false;
     this.serverStatus = undefined;
     this.runStartedAt = Date.now();
@@ -224,24 +298,93 @@ export class ChatSession {
       context: this.options.context,
       forwardedProps,
     };
+    const diag: RunDiagnostics = {
+      runId: input.runId,
+      firstEventMs: null,
+      durationMs: 0,
+      events: {},
+      ignored: 0,
+      a2uiErrors: {},
+      unclosedTools: 0,
+      unclosedTexts: 0,
+      outcome: "finished",
+    };
+    this.diag = diag;
+    const idle = this.idleWatch();
     this.changed();
+    let iterator: AsyncIterator<AgUiEvent> | undefined;
     try {
-      for await (const event of this.options.transport.run(input, this.abort.signal)) this.apply(event);
+      iterator = this.options.transport.run(input, this.abort.signal)[Symbol.asyncIterator]();
+      for (;;) {
+        const step = await Promise.race([iterator.next(), idle.expired]);
+        if (step.done) break;
+        idle.reset();
+        this.apply(step.value);
+      }
     } catch (e) {
-      if ((e as Error)?.name !== "AbortError") {
+      if (e instanceof IdleError) {
+        diag.outcome = "idle-timeout";
+        this.abort?.abort(); // a transport that honours the signal stops; one that does not is left behind
+        void iterator?.return?.()?.catch(() => {});
+        const seconds = Math.round(e.ms / 1000);
+        const message = `L'agent ne répond plus (aucun événement depuis ${seconds} s).`;
+        this.push({ kind: "error", id: uid(), message });
+        this.options.onRunError?.({ message, code: IDLE_TIMEOUT_CODE });
+      } else if ((e as Error)?.name === "AbortError") {
+        diag.outcome = "aborted";
+      } else {
+        diag.outcome = "error";
         const message = String((e as Error)?.message ?? e);
         this.push({ kind: "error", id: uid(), message });
         this.options.onRunError?.({ message });
       }
     } finally {
+      idle.stop();
+      diag.unclosedTools = [...this.toolItems.values()].filter((t) => !t.done).length;
+      diag.unclosedTexts = [...this.textItems.values()].filter((t) => t.streaming).length;
+      // Nothing else will close them: no endless spinner, no half-written bubble kept out of the history.
+      for (const tool of this.toolItems.values()) tool.done = true;
       for (const item of this.textItems.values()) if (item.streaming) this.commitText(item);
+      this.renderer.settle(); // surfaces updated but never created: tell the agent
+      diag.durationMs = Date.now() - this.runStartedAt;
+      if (this.abort?.signal.aborted && diag.outcome === "finished") diag.outcome = "aborted";
+      this.lastRun = diag;
+      this.diag = undefined;
       this.running = false;
       this.abort = undefined;
       this.changed();
+      this.options.onRunEnd?.(diag);
     }
   }
 
+  /** Rejects `expired` when no event has been seen for `idleTimeoutMs`. */
+  private idleWatch() {
+    const ms = this.options.idleTimeoutMs ?? 60_000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let fire!: (e: IdleError) => void;
+    const expired = new Promise<never>((_, reject) => (fire = reject));
+    expired.catch(() => {}); // never an unhandled rejection when the run ends first
+    const reset = () => {
+      if (!ms) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => fire(new IdleError(ms)), ms);
+    };
+    reset();
+    return { expired, reset, stop: () => clearTimeout(timer) };
+  }
+
   private handleA2ui(value: unknown) {
+    if (typeof value === "string") {
+      // Some backends carry the messages as a JSON string (one message, an array, or JSONL).
+      const parsed = parseJsonMessages(value);
+      if (!parsed) {
+        this.options.onWarning?.("A2UI payload is a string that is not valid JSON; ignored");
+        this.bumpA2uiError("INVALID_PAYLOAD");
+        this.pendingErrors.push({ code: "INVALID_PAYLOAD", surfaceId: "", message: "A2UI payload is not valid JSON" });
+        return;
+      }
+      value = parsed;
+    }
     const messages = Array.isArray(value) ? value : [value];
     for (const m of messages) {
       if (m && typeof m === "object") this.renderer.handle(m as A2uiServerMessage);
@@ -263,9 +406,14 @@ export class ChatSession {
   private onA2uiClientMessage(msg: A2uiClientMessage) {
     if ("action" in msg) void this.sendAction({ a2uiAction: msg });
     else {
+      this.bumpA2uiError(msg.error.code);
       this.pendingErrors.push(msg.error);
       this.options.onWarning?.(`A2UI error ${msg.error.code}: ${msg.error.message}`);
     }
+  }
+
+  private bumpA2uiError(code: string) {
+    if (this.diag) this.diag.a2uiErrors[code] = (this.diag.a2uiErrors[code] ?? 0) + 1;
   }
 
   private addUiBlock(): HTMLElement {
@@ -277,8 +425,29 @@ export class ChatSession {
 
   private startText(id: string) {
     this.serverStatus = undefined;
+    const existing = this.textItems.get(id);
+    if (existing) return existing; // duplicated START: keep appending to the same bubble
+    // Some providers never close a message before opening the next one.
+    for (const open of this.textItems.values()) if (open.streaming) this.commitText(open);
     const item = { kind: "text" as const, id, role: "assistant" as const, text: "", streaming: true };
     this.textItems.set(id, item);
+    this.push(item);
+    return item;
+  }
+
+  private toolFor(wire: string) {
+    return this.toolItems.get(this.toolWire.get(wire) ?? wire);
+  }
+
+  private startTool(wire: string, name: string): Extract<ChatItem, { kind: "tool" }> {
+    this.serverStatus = undefined;
+    const current = this.toolFor(wire);
+    if (current && !current.done) return current; // duplicated START
+    let id = wire;
+    for (let n = 2; this.toolItems.has(id); n++) id = `${wire}~${n}`; // id already used by a finished call
+    const item: Extract<ChatItem, { kind: "tool" }> = { kind: "tool", id, name, done: false };
+    this.toolItems.set(id, item);
+    this.toolWire.set(wire, id);
     this.push(item);
     return item;
   }

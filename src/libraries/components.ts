@@ -16,3 +16,6 @@ import "@supersoniks/concorde/core/components/ui/form/form-actions/form-actions"
 import "@supersoniks/concorde/core/components/ui/form/form-layout/form-layout";
 import "@supersoniks/concorde/core/components/ui/form/checkbox/checkbox";
 import "@supersoniks/concorde/core/components/ui/form/radio/radio";
+import "@supersoniks/concorde/core/components/ui/form/switch/switch";
+import "@supersoniks/concorde/core/components/ui/form/fieldset/fieldset";
+import "@supersoniks/concorde/core/components/ui/group/group";

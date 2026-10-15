@@ -101,6 +101,25 @@ Gabarits `chat:*` :
 
 Les boutons portent une `action: { name, context }`, qui revient en `forwardedProps.sduiAction`.
 
+## Tolérance aux écarts entre modèles
+
+Les modèles et les fournisseurs n'émettent pas les flux de la même façon. `ChatSession` absorbe ce qui peut l'être ; le reste se règle dans le backend (prompt, schéma d'outil, validation avant émission).
+
+**Absorbé côté client**
+- `updateComponents` / `updateDataModel` reçus avant `createSurface` : mis en attente (50 messages par surface au plus), appliqués dès que la surface existe. Ceux qui restent orphelins à la fin du run reviennent en `UNKNOWN_SURFACE` dans `a2uiErrors`.
+- `CUSTOM a2ui` dont la valeur est une chaîne JSON (message, tableau ou JSONL) : analysée. Une chaîne invalide donne une erreur `INVALID_PAYLOAD`.
+- `TEXT_MESSAGE_START` en double, message jamais clos avant le suivant, `TEXT_MESSAGE_CHUNK` sans `messageId` : regroupés dans la même bulle.
+- `TOOL_CALL_CHUNK` (forme compacte) et arguments d'outil non textuels : acceptés. Un `toolCallId` réutilisé après la fin d'un appel (« call_0 » à chaque étape chez certains serveurs) ouvre un nouvel appel au lieu de se mêler au précédent. Les outils sans `TOOL_CALL_END` sont marqués terminés à la fin du run.
+- Silence : sans aucun événement pendant `idleTimeoutMs` (60 s par défaut, `0` désactive), le run est abandonné avec l'erreur `IDLE_TIMEOUT` et un bouton « Réessayer ». Pour une étape longue, émettre régulièrement `CUSTOM status` : tout événement remet le compteur à zéro.
+
+**À faire côté backend**
+- Renvoyer `forwardedProps.a2uiErrors` au modèle au tour suivant : c'est ce qui lui permet de se corriger.
+- Valider les messages A2UI avant de les émettre, et réessayer ou réparer quand ils sont invalides.
+- Absorber dans l'adaptateur les différences de découpage du flux entre fournisseurs.
+
+**Diagnostic par run**
+`session.lastRun`, l'option `onRunEnd` et l'événement DOM `chat-run-end` (sur `sonic-chat`) donnent : délai avant le premier événement, durée, événements par type, événements ignorés, erreurs A2UI par code, outils et messages jamais clos, issue (`finished`, `error`, `aborted`, `idle-timeout`). À logguer pour comparer deux modèles sur des faits.
+
 ## Implémentation de référence
 
 Tadaaa (`apps/api/src/Agent`, `POST /api/agent/run`) : boucle d'agent avec les outils MCP de Tadaaa exécutés dans le process, l'outil `render_ui` (composants A2UI validés côté serveur avec les règles des artefacts, puis émis en `CUSTOM a2ui`) et un client LLM (Messages API d'Anthropic). Sans Symfony AI ni Node.

@@ -35,6 +35,7 @@ export type AgUiEvent = Base &
     | { type: "TEXT_MESSAGE_CHUNK"; messageId?: string; role?: AgUiRole; delta?: string }
     | { type: "TOOL_CALL_START"; toolCallId: string; toolCallName: string; parentMessageId?: string }
     | { type: "TOOL_CALL_ARGS"; toolCallId: string; delta: string }
+    | { type: "TOOL_CALL_CHUNK"; toolCallId?: string; toolCallName?: string; delta?: string }
     | { type: "TOOL_CALL_END"; toolCallId: string }
     | { type: "TOOL_CALL_RESULT"; messageId: string; toolCallId: string; content: string }
     | { type: "ACTIVITY_SNAPSHOT"; messageId: string; activityType: string; content: unknown; replace?: boolean }

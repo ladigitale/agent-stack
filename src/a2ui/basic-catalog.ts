@@ -98,6 +98,68 @@ function labelText(c: A2uiComponent, prop: string): string | undefined {
   return v == null ? undefined : escapeHtml(v);
 }
 
+/**
+ * Concorde extension props. The A2UI basic catalog only knows a handful of
+ * props per component; these optional extras (same names as the Concorde
+ * attributes) expose what Concorde offers on top. They are never required, and
+ * every value goes through an allow-list: `profile="safe"` does not filter
+ * attributes, so this is what keeps agent strings out of arbitrary attributes.
+ */
+const SIZES = ["2xs", "xs", "sm", "md", "lg", "xl", "2xl"] as const;
+const BUTTON_TYPES = ["primary", "neutral", "warning", "danger", "success", "info"] as const;
+const BUTTON_VARIANTS = ["outline", "ghost", "link"] as const;
+const BUTTON_SHAPES = ["circle", "square", "block"] as const;
+const FIELD_STATUSES = ["success", "error", "warning", "info"] as const;
+const JUSTIFY_CSS: Record<string, string> = {
+  start: "flex-start",
+  center: "center",
+  end: "flex-end",
+  spaceBetween: "space-between",
+  spaceAround: "space-around",
+  spaceEvenly: "space-evenly",
+  stretch: "stretch",
+};
+const ALIGN_CSS: Record<string, string> = { start: "flex-start", center: "center", end: "flex-end", stretch: "stretch" };
+
+/** Optional literal prop restricted to a list; any other value is dropped with a warning. */
+function oneOf(c: A2uiComponent, prop: string, allowed: readonly string[], ctx: MapContext): string | undefined {
+  const v = literal(c, prop);
+  if (v == null) return undefined;
+  if (allowed.includes(v)) return v;
+  ctx.warn(`${c.component} "${c.id}": ${prop}="${v}" is not supported (expected ${allowed.join(", ")}); ignored`);
+  return undefined;
+}
+
+/** Optional boolean literal (`true` → presence attribute). */
+function flag(c: A2uiComponent, prop: string): boolean {
+  return literal(c, prop) === "true";
+}
+
+/** label / description (escaped) and disabled, shared by every form control. */
+function textAttributes(c: A2uiComponent): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  const label = labelText(c, "label");
+  if (label) attributes.label = label;
+  const description = labelText(c, "description");
+  if (description) attributes.description = description;
+  if (flag(c, "disabled")) attributes.disabled = "";
+  return attributes;
+}
+
+/** Attributes shared by text-like inputs (`sonic-input`, `sonic-textarea`). */
+function inputAttributes(c: A2uiComponent, ctx: MapContext): Record<string, string> {
+  const attributes = textAttributes(c);
+  const size = oneOf(c, "size", SIZES, ctx);
+  if (size) attributes.size = size;
+  const status = oneOf(c, "status", FIELD_STATUSES, ctx);
+  if (status) attributes.status = status;
+  if (flag(c, "required")) attributes.required = "";
+  if (flag(c, "readonly")) attributes.readonly = "";
+  const placeholder = literal(c, "placeholder"); // set as a property by Lit, never parsed as HTML
+  if (placeholder) attributes.placeholder = placeholder;
+  return attributes;
+}
+
 /** Scratch data provider of a bridged field (Concorde field ⇄ A2UI value). */
 function fieldProvider(ctx: MapContext, componentId: string): string {
   return `${ctx.dataProvider}__${componentId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
@@ -121,8 +183,35 @@ function bridge(ctx: MapContext, c: A2uiComponent, key: string, codec: "bool" | 
 const TEXT_VARIANTS = new Set(["h1", "h2", "h3", "h4", "h5", "caption"]);
 
 const mappers: Record<string, Mapper> = {
-  Row: (c) => ({ key: "a2ui:Row", attributes: flexAttributes(c) }),
-  Column: (c) => ({ key: "a2ui:Column", attributes: flexAttributes(c) }),
+  Row: (c, ctx) => {
+    const layout = oneOf(c, "layout", ["actions", "group"], ctx);
+    if (layout === "actions") {
+      // sonic-form-actions: footer row for submit / cancel (justify and align are CSS values there).
+      const attributes: Record<string, string> = {};
+      const justify = literal(c, "justify");
+      const align = literal(c, "align");
+      if (justify && JUSTIFY_CSS[justify]) attributes.justify = JUSTIFY_CSS[justify];
+      if (align && ALIGN_CSS[align]) attributes.alignItems = ALIGN_CSS[align];
+      return { key: "a2ui:Row.actions", attributes };
+    }
+    if (layout === "group") {
+      // sonic-group: one row of controls sharing a radius, with optional label and description.
+      const attributes: Record<string, string> = {};
+      const label = labelText(c, "label");
+      if (label) attributes.label = label;
+      const description = labelText(c, "description");
+      if (description) attributes.description = description;
+      const align = literal(c, "align");
+      if (align && ALIGN_CSS[align]) attributes.alignItems = ALIGN_CSS[align];
+      return { key: "a2ui:Row.group", attributes };
+    }
+    return { key: "a2ui:Row", attributes: flexAttributes(c) };
+  },
+  Column: (c, ctx) => {
+    // sonic-form-layout: responsive two-column grid for form controls.
+    if (oneOf(c, "layout", ["form"], ctx) === "form") return { key: "a2ui:Column.form" };
+    return { key: "a2ui:Column", attributes: flexAttributes(c) };
+  },
   List: (c) => {
     const attributes = flexAttributes(c);
     if (literal(c, "direction") === "horizontal") attributes["data-a2ui-direction"] = "horizontal";
@@ -155,15 +244,31 @@ const mappers: Record<string, Mapper> = {
     return { key: "a2ui:Image", attributes };
   },
 
-  Button: (c) => {
+  Button: (c, ctx) => {
+    // `variant` takes the A2UI values (primary, borderless) and the Concorde ones (outline, ghost, link).
     const variant = literal(c, "variant");
-    return { key: variant === "primary" || variant === "borderless" ? `a2ui:Button.${variant}` : "a2ui:Button" };
+    const key = variant === "primary" || variant === "borderless" ? `a2ui:Button.${variant}` : "a2ui:Button";
+    const attributes: Record<string, string> = {};
+    if (variant && (BUTTON_VARIANTS as readonly string[]).includes(variant)) attributes.variant = variant;
+    else if (variant && !["default", "primary", "borderless"].includes(variant)) {
+      ctx.warn(`Button "${c.id}": variant="${variant}" is not supported; ignored`);
+    }
+    // An explicit `type` (colour) wins over the one implied by variant "primary".
+    const type = oneOf(c, "type", BUTTON_TYPES, ctx);
+    if (type) attributes.type = type;
+    const size = oneOf(c, "size", SIZES, ctx);
+    if (size) attributes.size = size;
+    const shape = oneOf(c, "shape", BUTTON_SHAPES, ctx);
+    if (shape) attributes.shape = shape;
+    if (flag(c, "loading")) attributes.loading = "";
+    if (flag(c, "disabled")) attributes.disabled = "";
+    // Selected / toggled-on look.
+    if (flag(c, "active")) attributes.active = "";
+    return { key, attributes };
   },
 
   TextField: (c, ctx) => {
-    const attributes: Record<string, string> = {};
-    const label = labelText(c, "label");
-    if (label) attributes.label = label;
+    const attributes = inputAttributes(c, ctx);
     const variant = literal(c, "variant");
     const key =
       variant === "longText" || variant === "number" || variant === "obscured"
@@ -188,25 +293,30 @@ const mappers: Record<string, Mapper> = {
       value: "true",
       name: "v",
       formDataProvider: fieldProvider(ctx, c.id),
+      ...textAttributes(c),
     };
-    const label = labelText(c, "label");
-    if (label) attributes.label = label;
+    // `variant: "switch"` renders the same boolean as a sonic-switch.
+    const tagName = oneOf(c, "variant", ["checkbox", "switch"], ctx) === "switch" ? "sonic-switch" : "sonic-checkbox";
     return {
       key: "a2ui:CheckBox",
-      nodes: [bridge(ctx, c, boundPath(c, "value"), "bool"), { tagName: "sonic-checkbox", attributes }],
+      nodes: [bridge(ctx, c, boundPath(c, "value"), "bool"), { tagName, attributes }],
     };
   },
 
   ChoicePicker: (c, ctx) => {
     const key = boundPath(c, "value");
     const multiple = literal(c, "variant") === "multipleSelection";
-    if (literal(c, "displayStyle") === "chips") ctx.warn(`ChoicePicker "${c.id}": chips are rendered as ${multiple ? "checkboxes" : "radios"}`);
+    // Chips are real toggle buttons (sonic-button is checkable, like checkbox and radio).
+    const chips = literal(c, "displayStyle") === "chips";
     if (c.filterable === true) ctx.warn(`ChoicePicker "${c.id}": filterable is ignored`);
     const options = Array.isArray(c.options) ? (c.options as { label?: unknown; value?: unknown }[]) : [];
-    const nodes: SDUINode[] = [];
-    const label = literal(c, "label");
-    if (label) nodes.push({ tagName: "p", attributes: { "data-a2ui-label": "" }, textContent: label });
-    if (!multiple) nodes.push(bridge(ctx, c, key, "list1"));
+    const disabled = flag(c, "disabled");
+    const size = oneOf(c, "size", SIZES, ctx);
+    const field = multiple
+      ? { formDataProvider: ctx.dataProvider, name: key }
+      : { formDataProvider: fieldProvider(ctx, c.id), name: "v" };
+    const choices: SDUINode[] = [];
+    if (!multiple) choices.push(bridge(ctx, c, key, "list1"));
     for (const [i, opt] of options.entries()) {
       if (typeof opt?.value !== "string") {
         throw new A2uiUnsupportedError(`ChoicePicker.options[${i}].value: a string is required`, c.id);
@@ -214,16 +324,30 @@ const mappers: Record<string, Mapper> = {
       if (typeof opt.label !== "string") {
         throw new A2uiUnsupportedError(`ChoicePicker.options[${i}].label: bindings are not supported yet`, c.id);
       }
-      nodes.push({
-        tagName: multiple ? "sonic-checkbox" : "sonic-radio",
-        attributes: {
-          value: opt.value,
-          label: escapeHtml(opt.label),
-          ...(multiple ? { formDataProvider: ctx.dataProvider, name: key } : { formDataProvider: fieldProvider(ctx, c.id), name: "v" }),
-        },
-      });
+      const attributes: Record<string, string> = { value: opt.value, ...field };
+      if (disabled) attributes.disabled = "";
+      if (chips) {
+        attributes.variant = "outline";
+        if (!multiple) attributes.radio = "";
+        if (size) attributes.size = size;
+        choices.push({ tagName: "sonic-button", attributes, textContent: opt.label });
+      } else {
+        attributes.label = escapeHtml(opt.label);
+        choices.push({ tagName: multiple ? "sonic-checkbox" : "sonic-radio", attributes });
+      }
     }
-    return { key: "a2ui:ChoicePicker", nodes };
+    // The fieldset carries the label, the description and the native group semantics.
+    const attributes: Record<string, string> = {};
+    const label = labelText(c, "label");
+    if (label) attributes.label = label;
+    const description = labelText(c, "description");
+    if (description) attributes.description = description;
+    if (disabled) attributes.disabled = "";
+    return {
+      key: "a2ui:ChoicePicker",
+      attributes,
+      nodes: [{ tagName: "div", attributes: { "data-a2ui-choices": chips ? "chips" : "list" }, nodes: choices }],
+    };
   },
 
   Slider: (c, ctx) => {
@@ -232,11 +356,10 @@ const mappers: Record<string, Mapper> = {
       name: "v",
       formDataProvider: fieldProvider(ctx, c.id),
       min: literal(c, "min") ?? "0",
+      ...inputAttributes(c, ctx),
     };
     const max = literal(c, "max");
     if (max) attributes.max = max;
-    const label = labelText(c, "label");
-    if (label) attributes.label = label;
     return {
       key: "a2ui:Slider",
       nodes: [bridge(ctx, c, boundPath(c, "value"), "number"), { tagName: "sonic-input", attributes }],
@@ -246,9 +369,11 @@ const mappers: Record<string, Mapper> = {
   DateTimeInput: (c, ctx) => {
     const date = c.enableDate === true;
     const time = c.enableTime === true;
-    const attributes: Record<string, string> = { formDataProvider: ctx.dataProvider, name: boundPath(c, "value") };
-    const label = labelText(c, "label");
-    if (label) attributes.label = label;
+    const attributes: Record<string, string> = {
+      formDataProvider: ctx.dataProvider,
+      name: boundPath(c, "value"),
+      ...inputAttributes(c, ctx),
+    };
     for (const bound of ["min", "max"]) {
       const v = literal(c, bound);
       if (v) attributes[bound] = v;
