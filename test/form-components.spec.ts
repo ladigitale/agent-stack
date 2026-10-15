@@ -54,7 +54,10 @@ it("ChoicePicker writes a string list, single or multiple", async () => {
   await tick(3);
   const radios = [...container.querySelectorAll('[data-sdui-node-id="single"] sonic-radio')] as (HTMLElement & { checked: unknown })[];
   expect(radios.map((r) => r.checked)).toEqual([null, true]);
-  expect(container.querySelector('[data-sdui-node-id="single"] [data-a2ui-label]')?.textContent).toBe("Taille");
+  // The label now lives on a sonic-fieldset (legend + native group semantics).
+  const group = container.querySelector('[data-sdui-node-id="single"]')!;
+  expect(group.tagName).toBe("SONIC-FIELDSET");
+  expect(group.getAttribute("label")).toBe("Taille");
   PublisherManager.get("a2ui_f__single").v.set("a");
   await tick();
   expect(model().one).toEqual(["a"]);

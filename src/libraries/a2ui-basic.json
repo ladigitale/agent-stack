@@ -5,10 +5,28 @@
       "data-a2ui": "Row"
     }
   },
+  "a2ui:Row.actions": {
+    "tagName": "sonic-form-actions",
+    "attributes": {
+      "data-a2ui": "FormActions"
+    }
+  },
+  "a2ui:Row.group": {
+    "tagName": "sonic-group",
+    "attributes": {
+      "data-a2ui": "Group"
+    }
+  },
   "a2ui:Column": {
     "tagName": "div",
     "attributes": {
       "data-a2ui": "Column"
+    }
+  },
+  "a2ui:Column.form": {
+    "tagName": "sonic-form-layout",
+    "attributes": {
+      "data-a2ui": "FormLayout"
     }
   },
   "a2ui:List": {
@@ -136,10 +154,11 @@
     }
   },
   "a2ui:ChoicePicker": {
-    "tagName": "div",
+    "tagName": "sonic-fieldset",
     "attributes": {
       "data-a2ui": "ChoicePicker",
-      "role": "group"
+      "variant": "ghost",
+      "tight": ""
     }
   },
   "a2ui:Slider": {

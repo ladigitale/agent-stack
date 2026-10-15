@@ -20,6 +20,8 @@ export const agentStackCss = `
 :where([data-a2ui-align="center"]) { align-items: center; }
 :where([data-a2ui-align="end"]) { align-items: flex-end; }
 :where([data-a2ui-align="stretch"]) { align-items: stretch; }
+:where([data-a2ui-choices]) { display: flex; flex-direction: column; gap: var(--a2ui-choice-gap, 0.5rem); }
+:where([data-a2ui-choices="chips"]) { flex-direction: row; flex-wrap: wrap; }
 :where([data-a2ui="Text"]) { margin: 0; }
 h1[data-a2ui="Text"] { font-size: var(--a2ui-h1, 2em); font-weight: 700; line-height: 1.2; }
 h2[data-a2ui="Text"] { font-size: var(--a2ui-h2, 1.5em); font-weight: 700; line-height: 1.25; }
