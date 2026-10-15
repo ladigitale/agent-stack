@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { ChatSession } from "../src/chat/session";
 import { ReplayTransport } from "../src/chat/transport";
 import type { AgUiEvent, RunAgentInput } from "../src/chat/ag-ui";
@@ -151,4 +152,101 @@ it("reports run errors with their code", async () => {
   });
   await session.send("x");
   expect(errors).toEqual([{ message: "Assistant non configuré", code: "AGENT_NOT_CONFIGURED" }]);
+});
+
+describe("robustness against provider differences", () => {
+  it("waits for createSurface when updates arrive first, and reports surfaces that never appear", async () => {
+    const errors: string[] = [];
+    const out = new ChatSession({
+      transport: new ReplayTransport(() => [
+        { type: "CUSTOM", name: "a2ui", value: { version: v, updateComponents: { surfaceId: "late", components: [{ id: "root", component: "Text", text: "ok" }] } } },
+        { type: "CUSTOM", name: "a2ui", value: { version: v, createSurface: { surfaceId: "late", catalogId: A2UI_BASIC_CATALOG_ID } } },
+        { type: "CUSTOM", name: "a2ui", value: { version: v, updateDataModel: { surfaceId: "ghost", value: {} } } },
+      ]),
+      onWarning: (w) => errors.push(w),
+    });
+    await out.send("x");
+    await tick();
+    expect(document.querySelector("[data-a2ui-surface]") ?? out.items.find((i) => i.kind === "ui")).toBeTruthy();
+    expect(out.lastRun?.a2uiErrors).toEqual({ UNKNOWN_SURFACE: 1 });
+    const ui = out.items.find((i) => i.kind === "ui") as { host: HTMLElement };
+    expect(ui.host.textContent).toContain("ok");
+  });
+
+  it("accepts A2UI carried as a JSON string and flags invalid ones", async () => {
+    const session = new ChatSession({
+      transport: new ReplayTransport(() => [
+        { type: "CUSTOM", name: "a2ui", value: JSON.stringify({ version: v, createSurface: { surfaceId: "s", catalogId: A2UI_BASIC_CATALOG_ID } }) },
+        { type: "CUSTOM", name: "a2ui", value: "not json" },
+      ]),
+      onWarning: () => {},
+    });
+    await session.send("x");
+    expect(session.items.some((i) => i.kind === "ui")).toBe(true);
+    expect(session.lastRun?.a2uiErrors).toEqual({ INVALID_PAYLOAD: 1 });
+  });
+
+  it("closes dangling tools and texts, handles chunk events and duplicated starts", async () => {
+    const session = new ChatSession({
+      transport: new ReplayTransport(() => [
+        { type: "TEXT_MESSAGE_START", messageId: "a" },
+        { type: "TEXT_MESSAGE_START", messageId: "a" },
+        { type: "TEXT_MESSAGE_CHUNK", messageId: "a", delta: "un" },
+        { type: "TEXT_MESSAGE_START", messageId: "b" }, // "a" never ended
+        { type: "TEXT_MESSAGE_CHUNK", delta: "deux" }, // no id: goes to "b"
+        { type: "TOOL_CALL_CHUNK", toolCallId: "t", toolCallName: "search", delta: '{"q":' },
+        { type: "TOOL_CALL_CHUNK", toolCallId: "t", delta: '"x"}' },
+        { type: "TOOL_CALL_ARGS", toolCallId: "u", delta: { obj: 1 } as never },
+        { type: "RUN_FINISHED" },
+        { type: "SOMETHING_NEW" },
+      ]),
+    });
+    await session.send("go");
+    const texts = session.items.filter((i) => i.kind === "text") as { text: string; streaming: boolean }[];
+    expect(texts.map((t) => t.text)).toEqual(["go", "un", "deux"]);
+    expect(texts.every((t) => !t.streaming)).toBe(true);
+    const tools = session.items.filter((i) => i.kind === "tool") as { name: string; done: boolean; args?: unknown }[];
+    expect(tools.map((t) => [t.name, t.done])).toEqual([["search", true], ["tool", true]]);
+    expect(tools[0].args).toEqual({ q: "x" });
+    expect(session.lastRun).toMatchObject({ unclosedTools: 2, unclosedTexts: 1, ignored: 1, outcome: "finished" });
+    expect(session.lastRun?.events.TEXT_MESSAGE_START).toBe(3);
+    expect(session.lastRun?.firstEventMs).not.toBeNull();
+  });
+
+  it("gives up on a silent agent, even when the transport ignores the abort signal", async () => {
+    vi.useFakeTimers();
+    try {
+      const errors: { message: string; code?: string }[] = [];
+      let ended: string | undefined;
+      const session = new ChatSession({
+        idleTimeoutMs: 1000,
+        transport: {
+          async *run() {
+            yield { type: "RUN_STARTED", threadId: "t", runId: "r" } as AgUiEvent;
+            await new Promise(() => {}); // never answers, never aborts
+          },
+        },
+        onRunError: (e) => errors.push(e),
+        onRunEnd: (d) => (ended = d.outcome),
+      });
+      const done = session.send("hello");
+      await vi.advanceTimersByTimeAsync(999);
+      expect(session.running).toBe(true);
+      await vi.advanceTimersByTimeAsync(2);
+      await done;
+      expect(session.running).toBe(false);
+      expect(errors).toEqual([{ message: "L'agent ne répond plus (aucun événement depuis 1 s).", code: "IDLE_TIMEOUT" }]);
+      expect(ended).toBe("idle-timeout");
+      expect(session.items.at(-1)).toMatchObject({ kind: "error" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not time out while events keep coming, and keeps run diagnostics", async () => {
+    const session = new ChatSession({ idleTimeoutMs: 50, transport: new ReplayTransport(() => textRun("m", "a", "b", "c"), 20) });
+    await session.send("x");
+    expect(session.lastRun?.outcome).toBe("finished");
+    expect(session.items.some((i) => i.kind === "error")).toBe(false);
+  });
 });

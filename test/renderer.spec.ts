@@ -158,3 +158,20 @@ it("keeps renderers apart with a data provider prefix and a shadow-root style ta
   expect(container.querySelector('[data-sdui-node-id="root"]')?.textContent).toBe("isolé");
   expect(shadow.getElementById("agent-stack-styles")).not.toBeNull();
 });
+
+it("can defer updates that arrive before createSurface", () => {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const sent: unknown[] = [];
+  const r = new A2uiRenderer({ container, deferOrphans: 2, onClientMessage: (m) => sent.push(m) });
+  const upd = { version: v, updateDataModel: { surfaceId: "late", value: { a: 1 } } } as const;
+  r.handle(upd);
+  r.handle(upd);
+  r.handle(upd); // over the limit: reported at once
+  expect(sent).toHaveLength(1);
+  r.handle(create("late"));
+  expect(sent).toHaveLength(1);
+  r.handle({ version: v, updateDataModel: { surfaceId: "never", value: {} } });
+  r.settle();
+  expect(sent.map((m) => (m as { error: { surfaceId: string } }).error.surfaceId)).toEqual(["late", "never"]);
+});

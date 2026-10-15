@@ -41,6 +41,14 @@ export type A2uiRendererOptions = {
   onWarning?: (message: string, surfaceId: string) => void;
   /** Catalogs this renderer accepts. Defaults to the A2UI basic catalog. */
   supportedCatalogIds?: string[];
+  /**
+   * Models sometimes send `updateComponents` / `updateDataModel` before
+   * `createSurface`. When set, such messages wait for their surface (at most
+   * this many per surface, extra ones are dropped with an error) instead of
+   * failing at once; `settle()` reports the ones that never found a surface.
+   * Default: 0 (strict, every orphan is an immediate `UNKNOWN_SURFACE`).
+   */
+  deferOrphans?: number;
 };
 
 type Mounted = { surface: A2uiSurface; element: SduiElement; onAction: (e: Event) => void };
@@ -53,6 +61,7 @@ type Mounted = { surface: A2uiSurface; element: SduiElement; onAction: (e: Event
 export class A2uiRenderer {
   private surfaces = new Map<string, Mounted>();
   private catalogs: Set<string>;
+  private orphans = new Map<string, A2uiServerMessage[]>();
 
   constructor(private readonly options: A2uiRendererOptions) {
     defineA2uiElements();
@@ -81,11 +90,11 @@ export class A2uiRenderer {
     if ("deleteSurface" in message) return this.deleteSurface(message.deleteSurface.surfaceId);
     if ("updateComponents" in message) {
       const m = message.updateComponents;
-      return this.withSurface(m.surfaceId, (s) => s.surface.updateComponents(m));
+      return this.withSurface(m.surfaceId, (s) => s.surface.updateComponents(m), message);
     }
     if ("updateDataModel" in message) {
       const m = message.updateDataModel;
-      return this.withSurface(m.surfaceId, (s) => s.surface.updateDataModel(m));
+      return this.withSurface(m.surfaceId, (s) => s.surface.updateDataModel(m), message);
     }
   }
 
@@ -97,7 +106,24 @@ export class A2uiRenderer {
     }
   }
 
+  /**
+   * Ends a burst of messages (a run): orphans still waiting for a surface are
+   * reported as `UNKNOWN_SURFACE` so the agent can correct itself.
+   */
+  settle(): void {
+    const waiting = [...this.orphans.entries()];
+    this.orphans.clear();
+    for (const [surfaceId, messages] of waiting) {
+      this.sendError({
+        code: "UNKNOWN_SURFACE",
+        surfaceId,
+        message: `Surface "${surfaceId}" does not exist (${messages.length} message(s) received before createSurface)`,
+      });
+    }
+  }
+
   deleteSurface(surfaceId: string): void {
+    this.orphans.delete(surfaceId);
     const mounted = this.surfaces.get(surfaceId);
     if (!mounted) return;
     mounted.element.removeEventListener("sdui-action", mounted.onAction);
@@ -136,11 +162,22 @@ export class A2uiRenderer {
     const container = this.options.resolveContainer?.(surfaceId) ?? this.options.container!;
     container.appendChild(element);
     this.surfaces.set(surfaceId, { surface, element, onAction });
+    const waiting = this.orphans.get(surfaceId);
+    if (waiting) {
+      this.orphans.delete(surfaceId);
+      for (const m of waiting) this.handle(m);
+    }
   }
 
-  private withSurface(surfaceId: string, run: (s: Mounted) => SurfaceResult) {
+  private withSurface(surfaceId: string, run: (s: Mounted) => SurfaceResult, message?: A2uiServerMessage) {
     const mounted = this.surfaces.get(surfaceId);
     if (!mounted) {
+      const limit = this.options.deferOrphans ?? 0;
+      const queue = this.orphans.get(surfaceId) ?? [];
+      if (message && limit > 0 && queue.length < limit) {
+        this.orphans.set(surfaceId, [...queue, message]);
+        return;
+      }
       this.sendError({ code: "UNKNOWN_SURFACE", surfaceId, message: `Surface "${surfaceId}" does not exist` });
       return;
     }

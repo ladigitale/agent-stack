@@ -74,6 +74,8 @@ export class SonicChat extends LitElement {
     emptyText: { type: String, attribute: "empty-text" },
     /** Nom accessible du journal de conversation. */
     logLabel: { type: String, attribute: "log-label" },
+    /** Abandonne un run sans événement depuis N ms (0 = jamais). Défaut : 60000. */
+    idleTimeoutMs: { type: Number, attribute: "idle-timeout-ms" },
     transport: { attribute: false },
     headers: { attribute: false },
     forwardedProps: { attribute: false },
@@ -85,6 +87,7 @@ export class SonicChat extends LitElement {
   placeholder = "Votre message…";
   emptyText = "";
   logLabel = "Conversation";
+  idleTimeoutMs = 60_000;
   transport?: AgentTransport;
   headers?: Record<string, string>;
   forwardedProps?: Record<string, unknown>;
@@ -140,6 +143,9 @@ export class SonicChat extends LitElement {
         transport,
         styleTarget: this.styleRoot,
         forwardedProps: () => this.forwardedProps ?? {},
+        idleTimeoutMs: this.idleTimeoutMs,
+        onRunEnd: (diagnostics) =>
+          this.dispatchEvent(new CustomEvent("chat-run-end", { detail: diagnostics, bubbles: true, composed: true })),
         onChange: () => this.requestUpdate(),
         onWarning: (w) => console.warn(`sonic-chat: ${w}`),
         onCustom: (name, value) =>
