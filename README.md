@@ -17,6 +17,8 @@ Le dépôt ne s'appuie que sur les [points d'extension publics de Concorde 5.1](
 | `/chat` | `sonic-chat`, session et transports AG-UI (HTTP SSE, rejeu) | phase 1 |
 | `/catalog` | Export du catalogue Concorde vers A2UI et schéma d'outil `render_ui` | à faire |
 
+Les recommandations UI/UX à donner aux agents sont dans [`docs/ui-guidelines.md`](docs/ui-guidelines.md).
+
 Le contrat attendu du backend PHP est décrit dans [`docs/backend-contract.md`](docs/backend-contract.md).
 
 ## Démo

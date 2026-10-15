@@ -23,12 +23,14 @@ export const agentStackCss = `
 :where([data-a2ui-choices]) { display: flex; flex-direction: column; gap: var(--a2ui-choice-gap, 0.5rem); }
 :where([data-a2ui-choices="chips"]) { flex-direction: row; flex-wrap: wrap; }
 :where([data-a2ui="Text"]) { margin: 0; }
-h1[data-a2ui="Text"] { font-size: var(--a2ui-h1, 2em); font-weight: 700; line-height: 1.2; }
-h2[data-a2ui="Text"] { font-size: var(--a2ui-h2, 1.5em); font-weight: 700; line-height: 1.25; }
-h3[data-a2ui="Text"] { font-size: var(--a2ui-h3, 1.25em); font-weight: 600; line-height: 1.3; }
-h4[data-a2ui="Text"] { font-size: var(--a2ui-h4, 1.1em); font-weight: 600; }
-h5[data-a2ui="Text"] { font-size: var(--a2ui-h5, 1em); font-weight: 600; }
-small[data-a2ui="Text"] { font-size: 0.85em; opacity: 0.8; }
+h1[data-a2ui="Text"] { font-size: var(--a2ui-h1, 1.6em); font-weight: 700; line-height: 1.2; text-wrap: balance; }
+h2[data-a2ui="Text"] { font-size: var(--a2ui-h2, 1.4em); font-weight: 700; line-height: 1.25; text-wrap: balance; }
+h3[data-a2ui="Text"] { font-size: var(--a2ui-h3, 1.2em); font-weight: 600; line-height: 1.3; text-wrap: balance; }
+h4[data-a2ui="Text"] { font-size: var(--a2ui-h4, 1.1em); font-weight: 600; line-height: 1.35; }
+h5[data-a2ui="Text"] { font-size: var(--a2ui-h5, 1em); font-weight: 600; line-height: 1.4; }
+/* More air above a heading than below: it belongs to what follows. */
+:where(h1, h2, h3, h4, h5)[data-a2ui="Text"]:not(:first-child) { margin-block-start: var(--a2ui-heading-gap, 0.5rem); }
+small[data-a2ui="Text"] { font-size: 0.85em; color: color-mix(in srgb, currentColor 72%, transparent); }
 :where([data-chat="answer"]) { display: flex; flex-direction: column; gap: var(--a2ui-gap, 0.75rem); white-space: pre-wrap; }
 :where([data-chat="short-form"]) { display: flex; flex-direction: column; gap: var(--a2ui-gap, 0.75rem); }
 `;

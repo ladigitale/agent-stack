@@ -74,6 +74,7 @@ export class ChatSession {
   private history: AgUiMessage[] = [];
   private renderer: A2uiRenderer;
   private pendingErrors: A2uiClientError[] = [];
+  private lastForwarded?: Record<string, unknown>;
   private abort?: AbortController;
   private textItems = new Map<string, Extract<ChatItem, { kind: "text" }>>();
   private toolItems = new Map<string, Extract<ChatItem, { kind: "tool" }>>();
@@ -111,6 +112,11 @@ export class ChatSession {
   /** Runs the agent with an action coming from a UI block. */
   sendAction(forwarded: Record<string, unknown>): Promise<void> {
     return this.run(forwarded);
+  }
+
+  /** Replays the last run (same history, same action) after a failure. */
+  retry(): Promise<void> {
+    return this.run(this.lastForwarded);
   }
 
   stop(): void {
@@ -207,6 +213,7 @@ export class ChatSession {
       return;
     }
     this.running = true;
+    this.lastForwarded = forwarded;
     this.gotEvent = false;
     this.serverStatus = undefined;
     this.runStartedAt = Date.now();
