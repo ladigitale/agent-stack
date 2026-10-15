@@ -250,3 +250,22 @@ describe("robustness against provider differences", () => {
     expect(session.items.some((i) => i.kind === "error")).toBe(false);
   });
 });
+
+it("treats a reused tool call id as a new call, with its own arguments", async () => {
+  const session = new ChatSession({
+    transport: new ReplayTransport(() => [
+      { type: "TOOL_CALL_START", toolCallId: "call_0", toolCallName: "list" },
+      { type: "TOOL_CALL_ARGS", toolCallId: "call_0", delta: '{"a":1}' },
+      { type: "TOOL_CALL_END", toolCallId: "call_0" },
+      { type: "TOOL_CALL_START", toolCallId: "call_0", toolCallName: "render_ui" },
+      { type: "TOOL_CALL_ARGS", toolCallId: "call_0", delta: '{"b":2}' },
+      { type: "TOOL_CALL_END", toolCallId: "call_0" },
+    ]),
+  });
+  await session.send("go");
+  const tools = session.items.filter((i) => i.kind === "tool") as { name: string; done: boolean; args?: unknown }[];
+  expect(tools.map((t) => [t.name, t.done, t.args])).toEqual([
+    ["list", true, { a: 1 }],
+    ["render_ui", true, { b: 2 }],
+  ]);
+});

@@ -126,6 +126,8 @@ export class ChatSession {
   private serverStatus?: string;
   private gotEvent = false;
   private toolArgs = new Map<string, string>();
+  /** Id de l'appel d'outil sur le fil → clé de l'item : un id réutilisé par un autre appel (« call_0 » à chaque étape) crée un nouvel item. */
+  private toolWire = new Map<string, string>();
   private history: AgUiMessage[] = [];
   private renderer: A2uiRenderer;
   private pendingErrors: A2uiClientError[] = [];
@@ -222,23 +224,21 @@ export class ChatSession {
       case "TOOL_CALL_CHUNK": // compact form: start + args in one event, the name only on the first
       case "TOOL_CALL_ARGS": {
         const e = event as { toolCallId?: unknown; toolCallName?: unknown; delta?: unknown };
-        const id = String(e.toolCallId ?? [...this.toolItems.keys()].pop() ?? uid());
-        if (!this.toolItems.has(id)) this.startTool(id, String(e.toolCallName ?? "tool"));
+        const wire = String(e.toolCallId ?? [...this.toolWire.keys()].pop() ?? uid());
+        const item = this.toolFor(wire) ?? this.startTool(wire, String(e.toolCallName ?? "tool"));
+        const id = item.id;
         const raw = (this.toolArgs.get(id) ?? "") + asText(e.delta);
         this.toolArgs.set(id, raw);
-        const item = this.toolItems.get(id);
-        if (item) {
-          try {
-            const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === "object") item.args = parsed as Record<string, unknown>;
-          } catch {
-            /* arguments still streaming */
-          }
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") item.args = parsed as Record<string, unknown>;
+        } catch {
+          /* arguments still streaming */
         }
         break;
       }
       case "TOOL_CALL_END": {
-        const item = this.toolItems.get(String(event.toolCallId));
+        const item = this.toolFor(String(event.toolCallId));
         if (item) item.done = true;
         break;
       }
@@ -435,12 +435,19 @@ export class ChatSession {
     return item;
   }
 
-  private startTool(id: string, name: string) {
+  private toolFor(wire: string) {
+    return this.toolItems.get(this.toolWire.get(wire) ?? wire);
+  }
+
+  private startTool(wire: string, name: string): Extract<ChatItem, { kind: "tool" }> {
     this.serverStatus = undefined;
-    const existing = this.toolItems.get(id);
-    if (existing) return existing;
-    const item = { kind: "tool" as const, id, name, done: false };
+    const current = this.toolFor(wire);
+    if (current && !current.done) return current; // duplicated START
+    let id = wire;
+    for (let n = 2; this.toolItems.has(id); n++) id = `${wire}~${n}`; // id already used by a finished call
+    const item: Extract<ChatItem, { kind: "tool" }> = { kind: "tool", id, name, done: false };
     this.toolItems.set(id, item);
+    this.toolWire.set(wire, id);
     this.push(item);
     return item;
   }
