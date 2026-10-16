@@ -29,5 +29,5 @@ Parti pris : une surface A2UI/SDUI est un **outil** (mode « Operate » d'Impecc
 ## Ce que fournit `agent-stack`
 - Cibles tactiles ≥ 44 px (onglets, bouton de fermeture de la modale), focus visible, `Tabs` navigables aux flèches / Début / Fin.
 - Texte secondaire en `color-mix` (pas d'`opacity`, qui dégrade le contraste), champs ≥ 16 px (pas de zoom iOS).
-- Chat : défilement automatique seulement si l'utilisateur est en bas, Entrée IME-safe, « Réessayer » après une erreur, état vide configurable (`empty-text`), journal focusable et nommé (`log-label`).
+- Chat : défilement automatique seulement si l'utilisateur est en bas, Entrée IME-safe, bouton « Continuer » après une erreur (envoie « Continue » comme si l'utilisateur l'avait tapé ; libellé et message réglables par `continue-label` / `continue-text`), état vide configurable (`empty-text`), journal focusable et nommé (`log-label`).
 - Thème : variables `--a2ui-gap`, `--a2ui-heading-gap`, `--a2ui-h1…h5`, `--a2ui-choice-gap`, `--a2ui-muted`, `--a2ui-field-border`.
