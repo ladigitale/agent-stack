@@ -63,7 +63,7 @@ const PINNED_THRESHOLD = 48;
  *
  * Comportements : Entrée envoie (Maj+Entrée = retour à la ligne, et pas pendant
  * une saisie IME), le journal suit le flux sauf si on a remonté pour relire,
- * le focus revient dans la saisie après un envoi, un échec propose « Réessayer ».
+ * le focus revient dans la saisie après un envoi, un échec propose « Continuer » (envoie « Continue » comme si l'utilisateur l'avait tapé).
  * Pendant un run, l'attribut `data-running` est posé sur l'élément.
  */
 export class SonicChat extends LitElement {
@@ -74,6 +74,10 @@ export class SonicChat extends LitElement {
     emptyText: { type: String, attribute: "empty-text" },
     /** Nom accessible du journal de conversation. */
     logLabel: { type: String, attribute: "log-label" },
+    /** Libellé du bouton proposé après un échec. Défaut : « Continuer ». */
+    continueLabel: { type: String, attribute: "continue-label" },
+    /** Message envoyé par ce bouton, comme si l'utilisateur l'avait tapé. Défaut : « Continue ». */
+    continueText: { type: String, attribute: "continue-text" },
     /** Abandonne un run sans événement depuis N ms (0 = jamais). Défaut : 60000. */
     idleTimeoutMs: { type: Number, attribute: "idle-timeout-ms" },
     transport: { attribute: false },
@@ -89,6 +93,8 @@ export class SonicChat extends LitElement {
   placeholder = "Votre message…";
   emptyText = "";
   logLabel = "Conversation";
+  continueLabel = "Continuer";
+  continueText = "Continue";
   idleTimeoutMs = 60_000;
   transport?: AgentTransport;
   headers?: Record<string, string>;
@@ -237,12 +243,12 @@ export class SonicChat extends LitElement {
         </div>`;
       }
       case "error": {
-        // Le dernier échec se rejoue d'un clic : l'historique et l'action sont conservés.
+        // Après le dernier échec, un clic envoie « Continue » : le fil et son historique sont conservés.
         const session = this.session;
-        const retryable = !!session && !session.running && session.items[session.items.length - 1] === item;
+        const continuable = !!session && !session.running && session.items[session.items.length - 1] === item;
         return html`<div data-chat-error role="alert">
           <span>${item.message}</span>
-          ${retryable ? html`<sonic-button size="sm" variant="outline" @click=${this.onRetry}>Réessayer</sonic-button>` : nothing}
+          ${continuable ? html`<sonic-button size="sm" variant="outline" data-chat-continue @click=${this.onContinue}>${this.continueLabel}</sonic-button>` : nothing}
         </div>`;
       }
       default:
@@ -305,9 +311,12 @@ export class SonicChat extends LitElement {
     this.focusInput();
   };
 
-  private onRetry = () => {
+  /** Comme si l'utilisateur avait tapé « Continue » puis envoyé (le brouillon en cours n'est pas touché). */
+  private onContinue = () => {
+    const text = this.continueText.trim();
+    if (!text || !this.session || this.session.running) return;
     this.pinned = true;
-    void this.session?.retry();
+    void this.session.send(text);
     this.focusInput();
   };
 

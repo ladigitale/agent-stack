@@ -167,21 +167,44 @@ it("Enter sends, Shift+Enter and IME composition do not, blank drafts are ignore
   expect(runs).toBe(1);
 });
 
-it("offers a retry after a failed run and replays it", async () => {
+it("offers a Continue button after a failed run that sends \"Continue\" as a user message", async () => {
+  const inputs: any[] = [];
   let n = 0;
-  const el = mount(
-    new ReplayTransport(() => (n++ === 0 ? [{ type: "RUN_ERROR", message: "boom" }] : [{ type: "RUN_FINISHED" }]))
-  );
+  const el = mount({
+    async *run(input: any) {
+      inputs.push(input);
+      if (n++ === 0) yield { type: "RUN_ERROR", message: "boom" };
+      else yield { type: "RUN_FINISHED" };
+    },
+  } as any);
   await el.updateComplete;
   await el.send("hello");
   await el.updateComplete;
   const err = el.querySelector("[data-chat-error]")!;
   expect(err.getAttribute("role")).toBe("alert");
-  const retry = [...err.querySelectorAll("sonic-button")].find((b) => b.textContent?.includes("Réessayer"))!;
-  (retry as HTMLElement).click();
+  const buttons = [...err.querySelectorAll("sonic-button")];
+  expect(buttons.some((b) => b.textContent?.includes("Réessayer"))).toBe(false);
+  const cont = buttons.find((b) => b.textContent?.includes("Continuer"))!;
+  type(el, "brouillon en cours");
+  (cont as HTMLElement).click();
   await tick();
   await el.updateComplete;
   expect(n).toBe(2);
+  const sent = inputs[1].messages.map((m: any) => [m.role, m.content]);
+  expect(sent[sent.length - 1]).toEqual(["user", "Continue"]);
+  // Le brouillon de l'utilisateur est intact, et le bouton disparaît une fois le run relancé.
+  expect((el.querySelector("textarea") as HTMLTextAreaElement).value).toBe("brouillon en cours");
+});
+
+it("lets the app rename the Continue button and its message", async () => {
+  const el = mount(new ReplayTransport(() => [{ type: "RUN_ERROR", message: "boom" }]));
+  el.continueLabel = "Reprendre";
+  el.continueText = "Reprends où tu t'es arrêté";
+  await el.updateComplete;
+  await el.send("hello");
+  await el.updateComplete;
+  const btn = el.querySelector("[data-chat-continue]")!;
+  expect(btn.textContent).toContain("Reprendre");
 });
 
 it("flags data-running on the element while a run is in progress", async () => {
