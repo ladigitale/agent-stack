@@ -260,3 +260,49 @@ it("restores a past conversation and carries on in the same thread, with the tex
   expect(el.session!.threadId).toBe("other");
   expect(el.session!.items).toEqual([]);
 });
+
+describe("markdown", () => {
+  const run = async (markdown: boolean) => {
+    const el = document.createElement("sonic-chat") as HTMLElement & { transport: unknown; markdown: boolean; updateComplete: Promise<unknown>; send(t: string): unknown };
+    el.markdown = markdown;
+    el.transport = new ReplayTransport(() => [
+      { type: "TEXT_MESSAGE_START", messageId: "a", role: "assistant" },
+      { type: "TEXT_MESSAGE_CONTENT", messageId: "a", delta: "Voici **un** " },
+      { type: "TEXT_MESSAGE_CONTENT", messageId: "a", delta: "résumé." },
+      { type: "TEXT_MESSAGE_END", messageId: "a" },
+    ]);
+    document.body.appendChild(el);
+    await el.updateComplete;
+    await el.send("**Bonjour**");
+    await tick();
+    await el.updateComplete;
+    return el;
+  };
+
+  it("sans sonic-markdown défini : texte brut", async () => {
+    const el = await run(true);
+    expect(el.querySelector("sonic-markdown")).toBeNull();
+    expect(el.querySelector('[data-chat-msg="assistant"]')!.textContent).toBe("Voici **un** résumé.");
+  });
+
+  it("avec sonic-markdown : messages de l'agent seulement, flux terminé", async () => {
+    class FakeMarkdown extends HTMLElement {
+      text = "";
+      streaming = false;
+    }
+    if (!customElements.get("sonic-markdown")) customElements.define("sonic-markdown", FakeMarkdown);
+    const el = await run(true);
+    const md = el.querySelector('[data-chat-msg="assistant"] sonic-markdown') as FakeMarkdown | null;
+    expect(md?.text).toBe("Voici **un** résumé.");
+    expect(md?.streaming).toBe(false);
+    expect(md?.getAttribute("features")).toBe("gfm highlight math copy");
+    expect(el.querySelector('[data-chat-msg="assistant"]')!.hasAttribute("data-chat-md")).toBe(true);
+    expect(el.querySelector('[data-chat-msg="user"]')!.textContent).toBe("**Bonjour**");
+    expect(el.querySelector('[data-chat-msg="user"] sonic-markdown')).toBeNull();
+  });
+
+  it("option désactivée : texte brut même si sonic-markdown est défini", async () => {
+    const el = await run(false);
+    expect(el.querySelector("sonic-markdown")).toBeNull();
+  });
+});
