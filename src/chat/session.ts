@@ -81,6 +81,8 @@ export type ChatSessionOptions = {
   onRunEnd?: (diagnostics: RunDiagnostics) => void;
   /** Max A2UI messages kept per surface while waiting for `createSurface`. Default: 50. */
   deferOrphans?: number;
+  /** A2UI `Text` in Markdown rendered by `sonic-markdown` (see `A2uiRendererOptions.markdown`). */
+  markdown?: boolean;
 };
 
 const asText = (v: unknown): string =>
@@ -155,6 +157,7 @@ export class ChatSession {
       onWarning: (w) => options.onWarning?.(w),
       styleTarget: options.styleTarget,
       deferOrphans: options.deferOrphans ?? 50,
+      markdown: options.markdown === true,
     });
   }
 

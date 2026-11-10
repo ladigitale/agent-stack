@@ -21,6 +21,7 @@ const chatCss = `
 :where(sonic-chat [data-chat-msg]) { white-space: pre-wrap; overflow-wrap: anywhere; max-width: min(85%, 70ch); padding: 0.5rem 0.75rem; border-radius: var(--sc-rounded, 0.5rem); }
 :where(sonic-chat [data-chat-msg="user"]) { align-self: flex-end; background: var(--sc-base-100, color-mix(in srgb, currentColor 8%, transparent)); }
 :where(sonic-chat [data-chat-msg="assistant"]) { align-self: flex-start; }
+:where(sonic-chat [data-chat-msg][data-chat-md]) { white-space: normal; }
 :where(sonic-chat [data-chat-tool], sonic-chat [data-chat-error]) { font-size: 0.875em; color: var(--a2ui-muted); }
 :where(sonic-chat [data-chat-error]) { color: var(--sc-danger, #b42318); display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.75rem; }
 :where(sonic-chat [data-chat-tool], sonic-chat [data-chat-status]) { display: flex; align-items: center; gap: 0.5rem; }
@@ -51,7 +52,10 @@ const PINNED_THRESHOLD = 48;
 /**
  * `<sonic-chat endpoint="/agent">` — conversation UI over AG-UI.
  *
- * Text is always rendered as plain text. UI blocks (A2UI surfaces, SDUI
+ * Text is rendered as plain text. With `markdown`, the agent's messages (and
+ * Markdown A2UI `Text`) are rendered by `sonic-markdown` (addon `markdown` of
+ * `@supersoniks/creative-stack`, loaded by the host; plain text until it is
+ * defined); the user's messages stay plain. UI blocks (A2UI surfaces, SDUI
  * descriptors) are rendered by `sonic-sdui` in `profile="safe"`.
  * Rendered in light DOM so Concorde themes and ancestor attributes apply.
  *
@@ -87,6 +91,8 @@ export class SonicChat extends LitElement {
     draft: { state: true },
     threadId: { type: String, attribute: "thread-id" },
     restoreEntries: { attribute: false },
+    /** Messages de l'agent en Markdown (`sonic-markdown`). Lu à la création de la session pour les surfaces A2UI. */
+    markdown: { type: Boolean },
   };
 
   endpoint = "";
@@ -96,6 +102,7 @@ export class SonicChat extends LitElement {
   continueLabel = "Continuer";
   continueText = "Continue";
   idleTimeoutMs = 60_000;
+  markdown = false;
   transport?: AgentTransport;
   headers?: Record<string, string>;
   forwardedProps?: Record<string, unknown>;
@@ -164,6 +171,7 @@ export class SonicChat extends LitElement {
         styleTarget: this.styleRoot,
         forwardedProps: () => this.forwardedProps ?? {},
         idleTimeoutMs: this.idleTimeoutMs,
+        markdown: this.markdown,
         onRunEnd: (diagnostics) =>
           this.dispatchEvent(new CustomEvent("chat-run-end", { detail: diagnostics, bubbles: true, composed: true })),
         onChange: () => this.requestUpdate(),
@@ -227,6 +235,15 @@ export class SonicChat extends LitElement {
   private renderItem(item: ChatItem) {
     switch (item.kind) {
       case "text":
+        if (this.markdown && item.role === "assistant" && customElements.get("sonic-markdown")) {
+          // Rendu incrémental pendant le flux, rendu complet à la fin (liens par référence, notes).
+          return html`<div data-chat-msg=${item.role} data-chat-md ?data-streaming=${item.streaming}><sonic-markdown
+            .text=${item.text}
+            ?streaming=${item.streaming}
+            features="gfm highlight math copy"
+            heading-offset="2"
+          ></sonic-markdown></div>`;
+        }
         return html`<div data-chat-msg=${item.role} ?data-streaming=${item.streaming}>${item.text}</div>`;
       case "ui":
         return html`<div data-chat-block>${item.host}</div>`;

@@ -46,7 +46,7 @@ chat.headers = { Authorization: "Bearer …" };
 chat.transport = new ReplayTransport(script); // ou toute implémentation de AgentTransport
 ```
 
-Le texte des messages est toujours affiché en texte brut. Les blocs d'interface passent par `sonic-sdui` en `profile="safe"`.
+Le texte des messages est affiché en texte brut. Avec l'attribut `markdown`, les messages de l'agent (et les `Text` A2UI en Markdown) sont rendus par `sonic-markdown`, l'addon `markdown` de `@supersoniks/creative-stack`, que l'hôte charge (`import "@supersoniks/creative-stack/markdown"`) : rendu incrémental pendant le flux, coloration du code, formules, boutons copier ; tant qu'il n'est pas défini, le texte reste brut. Les messages de l'utilisateur restent en texte brut. Les blocs d'interface passent par `sonic-sdui` en `profile="safe"`.
 
 ## Libraries
 
