@@ -29,6 +29,11 @@ export type MapContext = {
   warn: (message: string) => void;
   /** Library to expand. Defaults to `a2ui-basic`. */
   library?: Record<string, SDUINode>;
+  /**
+   * Render Markdown `Text` (body or no variant) with `sonic-markdown` (addon `markdown` of
+   * `@supersoniks/creative-stack`, to be loaded by the host). Default: plain text.
+   */
+  markdown?: boolean;
 };
 
 type Mapped = {
@@ -57,6 +62,9 @@ function literal(c: A2uiComponent, prop: string): string | undefined {
 }
 
 /** Literal → textContent ; path → <a2ui-text> bound to the data model (plain text). */
+/** Characters that suggest Markdown in a literal text. */
+const MARKDOWN_HINT = /[*_`#[]|^\s*([-+]|\d+\.)\s/m;
+
 function text(c: A2uiComponent, prop: string, ctx: MapContext): Pick<Mapped, "nodes" | "textContent"> {
   const v = c[prop] as A2uiDynamic | undefined;
   if (isPath(v)) {
@@ -218,9 +226,15 @@ const mappers: Record<string, Mapper> = {
     return { key: "a2ui:List", attributes };
   },
 
-  Text: (c, ctx) => {
+  Text: (c, ctx): Mapped => {
     const variant = literal(c, "variant");
-    if (typeof c.text === "string" && /[*_`#[]/.test(c.text)) {
+    if (ctx.markdown && (!variant || variant === "body")) {
+      const v = c.text as A2uiDynamic | undefined;
+      // Bound text: the element reads the data model itself (and follows its updates).
+      if (isPath(v)) return { key: "a2ui:Text.markdown", attributes: { source: `${ctx.dataProvider}.${pointerToKey(v.path)}` } };
+      if (typeof v === "string" && MARKDOWN_HINT.test(v)) return { key: "a2ui:Text.markdown", attributes: { text: v } };
+    }
+    if (typeof c.text === "string" && MARKDOWN_HINT.test(c.text)) {
       ctx.warn(`Text "${c.id}": Markdown is rendered as plain text`);
     }
     const key = variant && TEXT_VARIANTS.has(variant) ? `a2ui:Text.${variant}` : "a2ui:Text";

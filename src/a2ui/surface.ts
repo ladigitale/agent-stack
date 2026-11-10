@@ -61,7 +61,9 @@ export class A2uiSurface {
     readonly surfaceId: string,
     dataProvider = dataProviderIdFor(surfaceId),
     /** Renames emitted tags (e.g. `sonic-card` → `afx-card` in a prefixed Concorde build). */
-    private readonly mapTag: (tag: string) => string = (t) => t
+    private readonly mapTag: (tag: string) => string = (t) => t,
+    /** Markdown `Text` rendered by `sonic-markdown` (see `A2uiRendererOptions.markdown`). */
+    private readonly markdown = false
   ) {
     this.dataProvider = dataProvider;
   }
@@ -246,6 +248,7 @@ export class A2uiSurface {
         mapComponent(c, {
           dataProvider: this.dataProvider,
           warn: (m) => result.warnings.push(m),
+          markdown: this.markdown,
         }),
         this.mapTag
       );

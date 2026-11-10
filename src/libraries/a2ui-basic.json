@@ -77,6 +77,14 @@
       "data-a2ui": "Text"
     }
   },
+  "a2ui:Text.markdown": {
+    "tagName": "sonic-markdown",
+    "attributes": {
+      "data-a2ui": "Text",
+      "features": "gfm copy",
+      "heading-offset": "2"
+    }
+  },
   "a2ui:Card": {
     "tagName": "sonic-card",
     "attributes": {

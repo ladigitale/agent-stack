@@ -35,6 +35,13 @@ export type A2uiRendererOptions = {
    * component prefix, e.g. `(t) => t.replace(/^sonic-/, "afx-")`.
    */
   mapTag?: (tag: string) => string;
+  /**
+   * Render Markdown `Text` (no variant or `body`) with `sonic-markdown`, from the `markdown`
+   * addon of `@supersoniks/creative-stack`, which the host must load. Text bound to the data
+   * model is always handed to it (`source`), literal text only when it looks like Markdown.
+   * Default: false (plain text, with a warning when Markdown is detected).
+   */
+  markdown?: boolean;
   /** Called with every message to send back to the agent (actions, errors). */
   onClientMessage?: (msg: A2uiClientMessage) => void;
   /** Called with non-fatal notices (ignored features, approximations). */
@@ -146,7 +153,7 @@ export class A2uiRenderer {
       return;
     }
     const mapTag = this.options.mapTag ?? ((t: string) => t);
-    const surface = new A2uiSurface(surfaceId, dataProviderIdFor(surfaceId, this.options.dataProviderPrefix), mapTag);
+    const surface = new A2uiSurface(surfaceId, dataProviderIdFor(surfaceId, this.options.dataProviderPrefix), mapTag, this.options.markdown === true);
     const element = document.createElement(mapTag("sonic-sdui")) as SduiElement;
     element.setAttribute("profile", "safe");
     element.setAttribute("partial", "");
