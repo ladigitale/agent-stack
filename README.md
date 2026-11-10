@@ -73,6 +73,8 @@ renderer.handleText(chunk); // ou des lignes JSONL
 
 Chaque surface A2UI devient un `<sonic-sdui profile="safe" partial>`. Son data model vit dans le dataProvider `a2ui_<surfaceId>`.
 
+`markdown: true` rend les `Text` sans variante (ou `body`) en Markdown avec `sonic-markdown`, l'addon `markdown` de `@supersoniks/creative-stack`, que l'hôte doit charger (`import "@supersoniks/creative-stack/markdown"`). Un texte lié au data model est toujours confié à `sonic-markdown` (`source` = chemin dans le dataProvider de la surface, mises à jour suivies) ; un texte littéral seulement s'il ressemble à du Markdown. Titres et légendes ne changent pas. Sans l'option, le Markdown reste affiché en texte brut, avec un avertissement.
+
 ### Correspondances
 
 | A2UI | Concorde |

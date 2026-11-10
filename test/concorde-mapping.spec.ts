@@ -260,3 +260,49 @@ describe("layouts", () => {
     expect(actions.querySelector('[data-sdui-node-id="ok"]')?.tagName).toBe("SONIC-BUTTON");
   });
 });
+
+describe("Text en Markdown (option markdown)", () => {
+  const mapMd = (c: A2uiComponent, markdown: boolean) => {
+    const warnings: string[] = [];
+    const ctx: MapContext = { dataProvider: "a2ui_t", warn: (m) => warnings.push(m), markdown };
+    return { node: mapComponent(c, ctx), warnings };
+  };
+
+  it("sans l'option : texte brut et avertissement", () => {
+    const { node, warnings } = mapMd({ id: "t", component: "Text", text: "**gras**" }, false);
+    expect(node.tagName).toBe("p");
+    expect(node.textContent).toBe("**gras**");
+    expect(warnings[0]).toMatch(/plain text/);
+  });
+
+  it("littéral Markdown → sonic-markdown text", () => {
+    const { node, warnings } = mapMd({ id: "t", component: "Text", text: "- un\n- deux" }, true);
+    expect(node.tagName).toBe("sonic-markdown");
+    expect(node.attributes).toMatchObject({ text: "- un\n- deux", features: "gfm copy", "heading-offset": "2" });
+    expect(warnings).toEqual([]);
+  });
+
+  it("texte simple : reste un paragraphe", () => {
+    expect(mapMd({ id: "t", component: "Text", text: "Bonjour" }, true).node.tagName).toBe("p");
+  });
+
+  it("texte lié au modèle → source du DataProvider de la surface", () => {
+    const { node } = mapMd({ id: "t", component: "Text", text: { path: "/answer/body" } }, true);
+    expect(node.tagName).toBe("sonic-markdown");
+    expect(node.attributes?.source).toBe("a2ui_t.answer.body");
+  });
+
+  it("titres et légendes : inchangés", () => {
+    expect(mapMd({ id: "t", component: "Text", text: "# x", variant: "h2" }, true).node.tagName).toBe("h2");
+    expect(mapMd({ id: "t", component: "Text", text: "*x*", variant: "caption" }, true).node.tagName).not.toBe("sonic-markdown");
+  });
+
+  it("le renderer transmet l'option et applique mapTag", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const r = new A2uiRenderer({ container, markdown: true, mapTag: (t) => t });
+    r.handle({ version: v, createSurface: { surfaceId: "md", catalogId: A2UI_BASIC_CATALOG_ID } });
+    r.handle({ version: v, updateComponents: { surfaceId: "md", components: [{ id: "root", component: "Text", text: "Un **mot**" }] } });
+    return tick(3).then(() => expect(container.querySelector("sonic-markdown")?.getAttribute("text")).toBe("Un **mot**"));
+  });
+});
