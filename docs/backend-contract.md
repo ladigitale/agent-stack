@@ -22,6 +22,22 @@ Ce que le backend PHP doit faire pour piloter `sonic-chat`. Le serveur n'émet q
 
 L'historique (`messages`) est renvoyé à chaque run. Par défaut, les cookies de session sont envoyés (`credentials: "same-origin"`).
 
+### Pièces jointes (`attachments`)
+
+Avec l'attribut `attachments`, un message utilisateur peut porter des pièces jointes : son `content` devient alors une liste de fragments AG-UI `InputContent` (texte d'abord, puis une entrée par pièce jointe) :
+
+```json
+{ "id": "…", "role": "user", "content": [
+  { "type": "text", "text": "Que vois-tu ?" },
+  { "type": "image", "source": { "type": "data", "value": "<base64>", "mimeType": "image/jpeg" }, "metadata": { "filename": "photo.jpg" } },
+  { "type": "document", "source": { "type": "data", "value": "<base64>", "mimeType": "application/pdf" }, "metadata": { "filename": "devis.pdf" } },
+  { "type": "document", "source": { "type": "data", "value": "<base64 UTF-8>", "mimeType": "text/plain" }, "metadata": { "filename": "Texte collé", "pasted": true } }
+] }
+```
+
+- Images réduites dans le navigateur (1600 px de côté, JPEG ; 5 Mo max) ; PDF tels quels (10 Mo max) ; fichiers texte (`text/*`, `.md`, `.csv`, `.json`…) et longs textes collés (plus de 2000 caractères ou 40 lignes) en `document` `text/plain`, base64 UTF-8.
+- Après un run réussi, l'historique renvoyé aux runs suivants ne garde qu'une mention des pièces jointes (`[pièce jointe déjà envoyée : nom]`) : le backend les garde dans sa mémoire du fil s'il en a besoin.
+
 ### Actions de l'utilisateur
 
 Un clic sur une action déclenche un nouveau run, sans nouveau message utilisateur. L'action est placée dans `forwardedProps` :
@@ -57,6 +73,7 @@ data: {"type":"RUN_FINISHED","threadId":"…","runId":"…"}
 
 Événements pris en compte :
 
+- `TOOL_CALL_RESULT` (`toolCallId`, `content`) : résultat d'un outil, affiché dans le détail de l'étape (tronqué) ; facultatif.
 - `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END` et `TEXT_MESSAGE_CHUNK`. Le texte est toujours affiché en texte brut.
 - `TOOL_CALL_START`, `TOOL_CALL_ARGS` et `TOOL_CALL_END` : une ligne par outil (spinner puis ✓). Le libellé vient de la propriété `toolLabels` de `sonic-chat` (texte ou fonction `(args, done) => string` ; les arguments sont connus dès que `TOOL_CALL_ARGS` est complet) ; défaut : le nom de l'outil.
 - `CUSTOM { name: "status", value: "Texte" | { label } }` : libellé d'état précis (« Étape 2 sur 3… »), affiché tant qu'aucun outil n'est en cours ni texte en train d'être écrit.

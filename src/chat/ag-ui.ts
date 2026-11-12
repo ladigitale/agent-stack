@@ -5,8 +5,18 @@
 
 export type AgUiRole = "developer" | "system" | "assistant" | "user" | "tool" | "activity" | "reasoning";
 
+/** Source d'un contenu joint : base64 (`data`) ou URL. */
+export type InputContentSource =
+  | { type: "data"; value: string; mimeType: string }
+  | { type: "url"; value: string; mimeType?: string };
+
+/** Fragments d'un message utilisateur multimodal (AG-UI `InputContent`). */
+export type InputContent =
+  | { type: "text"; text: string }
+  | { type: "image" | "audio" | "video" | "document"; source: InputContentSource; metadata?: Record<string, unknown> };
+
 export type AgUiMessage =
-  | { id: string; role: "user"; content: string }
+  | { id: string; role: "user"; content: string | InputContent[] }
   | { id: string; role: "assistant"; content?: string }
   | { id: string; role: "system" | "developer"; content: string }
   | { id: string; role: "tool"; content: string; toolCallId: string };
@@ -37,7 +47,7 @@ export type AgUiEvent = Base &
     | { type: "TOOL_CALL_ARGS"; toolCallId: string; delta: string }
     | { type: "TOOL_CALL_CHUNK"; toolCallId?: string; toolCallName?: string; delta?: string }
     | { type: "TOOL_CALL_END"; toolCallId: string }
-    | { type: "TOOL_CALL_RESULT"; messageId: string; toolCallId: string; content: string }
+    | { type: "TOOL_CALL_RESULT"; messageId: string; toolCallId: string; content: string; role?: "tool" }
     | { type: "ACTIVITY_SNAPSHOT"; messageId: string; activityType: string; content: unknown; replace?: boolean }
     | { type: "CUSTOM"; name: string; value: unknown }
     | { type: string; [key: string]: unknown }

@@ -4,7 +4,8 @@ import type { SDUIDescriptor } from "@supersoniks/concorde/core/components/funct
 import { A2uiRenderer } from "../a2ui/renderer";
 import type { A2uiClientError, A2uiClientMessage, A2uiServerMessage } from "../a2ui/types";
 import { agentStackLibrary } from "../libraries";
-import type { AgUiEvent, AgUiMessage, RunAgentInput } from "./ag-ui";
+import type { AgUiEvent, AgUiMessage, InputContent, RunAgentInput } from "./ag-ui";
+import { attachmentMeta, toInputContent, type AttachmentMeta, type ChatAttachment } from "./attachments";
 import type { AgentTransport } from "./transport";
 
 /** Names under which UI payloads travel inside AG-UI. See docs/backend-contract.md. */
@@ -43,9 +44,19 @@ export type RunDiagnostics = {
 export const IDLE_TIMEOUT_CODE = "IDLE_TIMEOUT";
 
 export type ChatItem =
-  | { kind: "text"; id: string; role: "user" | "assistant"; text: string; streaming: boolean }
+  | { kind: "text"; id: string; role: "user" | "assistant"; text: string; streaming: boolean; attachments?: AttachmentMeta[] }
   | { kind: "ui"; id: string; host: HTMLElement }
-  | { kind: "tool"; id: string; name: string; done: boolean; args?: Record<string, unknown> }
+  | {
+      kind: "tool";
+      id: string;
+      name: string;
+      done: boolean;
+      args?: Record<string, unknown>;
+      /** Résultat renvoyé par le backend (`TOOL_CALL_RESULT`), tronqué. */
+      result?: string;
+      startedAt?: number;
+      endedAt?: number;
+    }
   | { kind: "error"; id: string; message: string };
 
 /**
@@ -53,7 +64,7 @@ export type ChatItem =
  * a user/assistant text, or an AG-UI event to replay (tool calls, UI blocks, errors).
  */
 export type ChatLogEntry =
-  | { role: "user" | "assistant"; text: string; id?: string }
+  | { role: "user" | "assistant"; text: string; id?: string; attachments?: AttachmentMeta[] }
   | { event: AgUiEvent };
 
 export type ChatSessionOptions = {
@@ -84,6 +95,9 @@ export type ChatSessionOptions = {
   /** A2UI `Text` in Markdown rendered by `sonic-markdown` (see `A2uiRendererOptions.markdown`). */
   markdown?: boolean;
 };
+
+/** Taille gardée d'un résultat d'outil affiché. */
+const MAX_TOOL_RESULT = 8000;
 
 const asText = (v: unknown): string =>
   typeof v === "string" ? v : v == null ? "" : (() => { try { return JSON.stringify(v); } catch { return String(v); } })();
@@ -184,7 +198,8 @@ export class ChatSession {
         const id = entry.id || uid();
         if (entry.role === "user") {
           this.history.push({ id, role: "user", content: entry.text });
-          this.push({ kind: "text", id, role: "user", text: entry.text, streaming: false });
+          const attachments = Array.isArray(entry.attachments) && entry.attachments.length ? entry.attachments : undefined;
+          this.push({ kind: "text", id, role: "user", text: entry.text, streaming: false, ...(attachments ? { attachments } : {}) });
         } else {
           this.history.push({ id, role: "assistant", content: entry.text });
           this.push({ kind: "text", id, role: "assistant", text: entry.text, streaming: false });
@@ -196,14 +211,36 @@ export class ChatSession {
     this.changed();
   }
 
-  /** Sends a user message and runs the agent. */
-  send(text: string): Promise<void> {
+  /**
+   * Sends a user message (with optional attachments: images, documents, pasted text) and runs
+   * the agent. With attachments, `content` is a list of AG-UI `InputContent` parts.
+   */
+  send(text: string, attachments: ChatAttachment[] = []): Promise<void> {
     const content = text.trim();
-    if (!content) return Promise.resolve();
-    const message: AgUiMessage = { id: uid(), role: "user", content };
+    if (!content && !attachments.length) return Promise.resolve();
+    const message: AgUiMessage = attachments.length
+      ? { id: uid(), role: "user", content: toInputContent(content, attachments) }
+      : { id: uid(), role: "user", content };
     this.history.push(message);
-    this.push({ kind: "text", id: message.id, role: "user", text: content, streaming: false });
+    const metas = attachments.map(attachmentMeta);
+    this.push({ kind: "text", id: message.id, role: "user", text: content, streaming: false, ...(metas.length ? { attachments: metas } : {}) });
     return this.run();
+  }
+
+  /**
+   * Après un run réussi, le backend garde les pièces jointes dans sa mémoire du fil : l'historique
+   * renvoyé aux runs suivants n'en garde qu'une mention (requêtes légères).
+   */
+  private lightenHistory() {
+    this.history = this.history.map((m) => {
+      if (m.role !== "user" || typeof m.content === "string") return m;
+      const parts: InputContent[] = m.content.map((p) => {
+        if (p.type === "text") return p;
+        const name = typeof p.metadata?.filename === "string" ? p.metadata.filename : p.type;
+        return { type: "text", text: `[pièce jointe déjà envoyée : ${name}]` };
+      });
+      return { ...m, content: parts.map((p) => (p.type === "text" ? p.text : "")).filter(Boolean).join("\n\n") };
+    });
   }
 
   /** Runs the agent with an action coming from a UI block. */
@@ -237,8 +274,16 @@ export class ChatSession {
       case "STEP_STARTED":
       case "STEP_FINISHED":
       case "RUN_FINISHED":
-      case "TOOL_CALL_RESULT":
         break; // the run is alive: the status moves from "sending" to "thinking"
+      case "TOOL_CALL_RESULT": {
+        const item = this.toolFor(String(event.toolCallId));
+        if (!item) break;
+        const content = asText(event.content);
+        item.result = content.length > MAX_TOOL_RESULT ? `${content.slice(0, MAX_TOOL_RESULT)}…` : content;
+        item.done = true;
+        item.endedAt ??= Date.now();
+        break;
+      }
       case "TEXT_MESSAGE_START":
         this.startText(String(event.messageId));
         break;
@@ -275,7 +320,10 @@ export class ChatSession {
       }
       case "TOOL_CALL_END": {
         const item = this.toolFor(String(event.toolCallId));
-        if (item) item.done = true;
+        if (item) {
+          item.done = true;
+          item.endedAt ??= Date.now();
+        }
         break;
       }
       case "CUSTOM":
@@ -384,6 +432,7 @@ export class ChatSession {
       this.renderer.settle(); // surfaces updated but never created: tell the agent
       diag.durationMs = Date.now() - this.runStartedAt;
       if (this.abort?.signal.aborted && diag.outcome === "finished") diag.outcome = "aborted";
+      if (diag.outcome === "finished") this.lightenHistory();
       this.lastRun = diag;
       this.diag = undefined;
       this.running = false;
@@ -481,7 +530,7 @@ export class ChatSession {
     if (current && !current.done) return current; // duplicated START
     let id = wire;
     for (let n = 2; this.toolItems.has(id); n++) id = `${wire}~${n}`; // id already used by a finished call
-    const item: Extract<ChatItem, { kind: "tool" }> = { kind: "tool", id, name, done: false };
+    const item: Extract<ChatItem, { kind: "tool" }> = { kind: "tool", id, name, done: false, startedAt: Date.now() };
     this.toolItems.set(id, item);
     this.toolWire.set(wire, id);
     this.push(item);
