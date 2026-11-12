@@ -70,7 +70,9 @@ sonic-chat [data-chat-spinner] { box-sizing: border-box; border: 2px solid curre
 :where(sonic-chat [data-chat-attach-error]) { flex: 1 1 100%; color: var(--sc-danger, #b42318); font-size: 0.875em; margin: 0; }
 :where(sonic-chat [data-chat-msg] [data-chat-attachments]) { margin-top: 0.4rem; justify-content: flex-end; }
 :where(sonic-chat [data-chat-msg] [data-chat-attachment] img) { width: 5rem; height: 5rem; }
-:where(sonic-chat [data-chat-steps], sonic-chat details[data-chat-tool]) { font-size: 0.875em; color: var(--a2ui-muted); }
+:where(sonic-chat [data-chat-steps], sonic-chat details[data-chat-tool]) { display: block; font-size: 0.875em; color: var(--a2ui-muted); }
+:where(sonic-chat [data-chat-steps-list] details[data-chat-tool]) { font-size: 1em; }
+:where(sonic-chat [data-chat-msg] [data-chat-attachments]) { white-space: normal; }
 :where(sonic-chat [data-chat-steps] > summary, sonic-chat details[data-chat-tool] > summary) { cursor: pointer; display: flex; align-items: center; gap: 0.5rem; list-style: none; border-radius: 0.25rem; }
 :where(sonic-chat [data-chat-steps] > summary::-webkit-details-marker, sonic-chat details[data-chat-tool] > summary::-webkit-details-marker) { display: none; }
 :where(sonic-chat [data-chat-steps] > summary::before, sonic-chat details[data-chat-tool] > summary::before) { content: ""; flex: none; width: 0.4em; height: 0.4em; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform 0.15s; }
