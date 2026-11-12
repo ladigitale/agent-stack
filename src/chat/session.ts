@@ -194,10 +194,15 @@ export class ChatSession {
     for (const entry of entries) {
       if ("event" in entry) {
         if (entry.event && typeof entry.event === "object") this.apply(entry.event);
-      } else if (typeof entry.text === "string" && entry.text.trim()) {
+      } else if (
+        typeof entry.text === "string" &&
+        (entry.text.trim() || (entry.role === "user" && Array.isArray(entry.attachments) && entry.attachments.length))
+      ) {
         const id = entry.id || uid();
         if (entry.role === "user") {
-          this.history.push({ id, role: "user", content: entry.text });
+          // Pièces jointes d'un fil restauré : mentionnées (le contenu reste côté backend).
+          const names = (entry.attachments ?? []).map((a) => `[pièce jointe déjà envoyée : ${a.name}]`);
+          this.history.push({ id, role: "user", content: [entry.text, ...names].filter((t) => t.trim()).join("\n\n") });
           const attachments = Array.isArray(entry.attachments) && entry.attachments.length ? entry.attachments : undefined;
           this.push({ kind: "text", id, role: "user", text: entry.text, streaming: false, ...(attachments ? { attachments } : {}) });
         } else {

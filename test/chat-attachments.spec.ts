@@ -147,3 +147,10 @@ it("shows tool steps with parameters, result and a collapsible group", async () 
   expect((el.querySelector("details[data-chat-steps]") as HTMLDetailsElement).open).toBe(true);
   el.remove();
 });
+
+it("restores a message that only carried attachments", () => {
+  const session = new ChatSession({ transport: new ReplayTransport(() => []) });
+  session.restore([{ role: "user", text: "", attachments: [{ kind: "image", name: "plan.png", mimeType: "image/png", size: 10 }] }]);
+  const item = session.items[0];
+  expect(item.kind === "text" && item.attachments?.[0].name).toBe("plan.png");
+});
