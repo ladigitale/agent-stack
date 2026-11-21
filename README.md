@@ -6,7 +6,7 @@ Branche des agents IA sur le SDUI de [`@supersoniks/concorde`](https://concorde.
 - **A2UI** est le format d'échange.
 - **AG-UI** est le transport.
 
-Le dépôt ne s'appuie que sur les [points d'extension publics de Concorde 5.1](https://concorde.supersoniks.org/crawl/core/components/functional/sdui/sdui-extension-points.html). Ce qui manque côté Concorde est listé dans [`docs/concorde-gaps.md`](docs/concorde-gaps.md).
+Le dépôt ne s'appuie que sur les [points d'extension publics de Concorde](https://concorde.supersoniks.org/crawl/core/components/functional/sdui/sdui-extension-points.html). Ce qui manque côté Concorde est listé dans [`docs/concorde-gaps.md`](docs/concorde-gaps.md).
 
 ## État
 
@@ -124,13 +124,21 @@ Tout problème est signalé, à l'agent sous forme d'erreur A2UI ou à l'applica
 
 ## Intégration Vite
 
-Concorde publie ses sources TypeScript avec des décorateurs « legacy ». Un projet consommateur doit forcer les options suivantes :
+Concorde 7 demande Vite 8 et Node >= 22.12. Il publie ses sources TypeScript avec des décorateurs « legacy », qui posent des accesseurs sur le prototype. Vite 8 (Oxc) ne lit plus `esbuild.tsconfigRaw` et n'applique pas le `tsconfig` du projet aux fichiers de `node_modules` : sans réglage, un champ de classe (`type = "default"`, ou une propriété redéclarée dans une sous-classe) devient une propriété d'instance qui masque l'accesseur, et le composant ne se met plus à jour.
+
+Le plus simple est de passer par `concordeConf(...)` de `@supersoniks/concorde/vite-config`. Avec une configuration maison (ou un `vitest.config` séparé) :
 
 ```ts
-esbuild: {
-  tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false } },
-},
+import { decoratorsGuardPlugin, decoratorsTransformOptions } from "@supersoniks/concorde/vite-config";
+
+export default defineConfig({
+  plugins: [decoratorsGuardPlugin()],
+  oxc: decoratorsTransformOptions,
+  optimizeDeps: { rolldownOptions: { transform: decoratorsTransformOptions } },
+});
 ```
+
+`sonic-chat` déclare ses propriétés par `static properties` : le garde-fou de build ne voit que les décorateurs, c'est `test/class-fields.spec.ts` qui vérifie qu'aucun champ ne masque un accesseur.
 
 ## Développement
 
