@@ -1,13 +1,11 @@
 import { defineConfig } from "vitest/config";
+import { decoratorsTransformOptions } from "@supersoniks/concorde/vite-config";
 
-// Concorde ships TypeScript sources with legacy decorators: force the
-// matching compiler options for every transformed file, node_modules included.
+// Concorde ships TypeScript sources with legacy decorators: force the matching
+// Oxc options (legacy decorators, [[Set]] class fields) for every transformed
+// file, node_modules included.
 export default defineConfig({
-  esbuild: {
-    tsconfigRaw: {
-      compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false },
-    },
-  },
+  oxc: decoratorsTransformOptions,
   test: {
     environment: "jsdom",
     globals: true,
